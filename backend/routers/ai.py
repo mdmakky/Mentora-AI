@@ -12,7 +12,7 @@ router = APIRouter(prefix="/ai", tags=["AI Features"])
 async def summarize_document(
     doc_id: str,
     summary_type: str = "full",
-    language: str = "en",
+    language: str = "bn",
     user: dict = Depends(get_current_user),
 ):
     """Generate a summary for a document."""

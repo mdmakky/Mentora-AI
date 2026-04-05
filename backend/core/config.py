@@ -1,5 +1,9 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+from pathlib import Path
+
+
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
@@ -40,7 +44,7 @@ class Settings(BaseSettings):
     DEBUG_OTP_IN_RESPONSE: bool = False
 
     class Config:
-        env_file = ".env"
+        env_file = BACKEND_ROOT / ".env"
         case_sensitive = True
 
 

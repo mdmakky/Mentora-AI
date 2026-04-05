@@ -6,10 +6,14 @@ import time
 settings = get_settings()
 client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
 
 SYSTEM_PROMPT = """You are an academic AI assistant for university students named Mentora.
+DEFAULT LANGUAGE:
+- Always respond in Bengali (বাংলা) by default.
+- Only switch to another language if the student explicitly requests it.
+
 Your PRIMARY knowledge source is the provided course material context below.
 RESPONSE STRATEGY — follow in order:
 STEP 1 — CHECK COURSE MATERIAL:
@@ -119,7 +123,7 @@ STUDENT'S QUESTION: {question}"""
         return "Sorry, I'm currently experiencing technical difficulties connecting to the AI. Please try again in a moment."
 
 
-async def generate_summary(text: str, summary_type: str = "full", language: str = "en") -> str:
+async def generate_summary(text: str, summary_type: str = "full", language: str = "bn") -> str:
     """Generate a document summary."""
     lang_instruction = "Respond in English." if language == "en" else "Respond in Bengali (বাংলা)."
 

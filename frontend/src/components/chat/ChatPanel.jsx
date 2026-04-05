@@ -9,15 +9,33 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
   const {
     sessions, activeSessionId, messages, sending,
     loadingSessions, loadingMessages,
-    fetchSessions, createSession, selectSession, deleteSession, sendMessage,
+    fetchSessions, createSession, selectSession, deleteSession, sendMessage, clearMessages,
   } = useChatStore();
 
   const [showSessions, setShowSessions] = useState(false);
   const messagesEndRef = useRef(null);
+  const sessionPrefix = documentId ? `DOC::${documentId}::` : '';
+
+  const formatSessionTitle = (rawTitle) => {
+    if (!documentId || typeof rawTitle !== 'string') return rawTitle || 'AI Chat';
+    if (!rawTitle.startsWith(sessionPrefix)) return rawTitle || 'AI Chat';
+    const clean = rawTitle.slice(sessionPrefix.length).trim();
+    return clean || 'AI Chat';
+  };
+
+  const documentSessions = documentId
+    ? sessions.filter((s) => (s.title || '').startsWith(sessionPrefix))
+    : sessions;
 
   useEffect(() => {
     fetchSessions(courseId);
   }, [courseId, fetchSessions]);
+
+  useEffect(() => {
+    // Prevent session bleed when navigating between documents in the same course.
+    clearMessages();
+    setShowSessions(false);
+  }, [documentId, clearMessages]);
 
   // Auto-scroll on new message
   useEffect(() => {
@@ -25,7 +43,8 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
   }, [messages]);
 
   const handleNewSession = async () => {
-    await createSession(courseId, `Chat: ${documentName}`);
+    const title = documentId ? `${sessionPrefix}${documentName}` : `Chat: ${documentName}`;
+    await createSession(courseId, title);
     setShowSessions(false);
   };
 
@@ -38,7 +57,7 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
     await sendMessage(content, documentId ? [documentId] : null);
   };
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeSession = documentSessions.find((s) => s.id === activeSessionId);
 
   return (
     <div className="flex flex-col h-full">
@@ -51,7 +70,7 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
           >
             <Sparkles size={16} className="text-violet-500 flex-shrink-0" />
             <span className="truncate">
-              {activeSession?.title || 'AI Chat'}
+              {formatSessionTitle(activeSession?.title) || 'AI Chat'}
             </span>
             <ChevronDown size={14} className="text-slate-400 flex-shrink-0" />
           </button>
@@ -72,10 +91,10 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
                   <div className="flex justify-center py-4">
                     <Spinner size="sm" />
                   </div>
-                ) : sessions.length === 0 ? (
+                ) : documentSessions.length === 0 ? (
                   <p className="text-xs text-slate-400 text-center py-4">No chat sessions yet</p>
                 ) : (
-                  sessions.map((s) => (
+                  documentSessions.map((s) => (
                     <div
                       key={s.id}
                       className={`flex items-center justify-between group px-3 py-2 rounded-lg cursor-pointer transition ${
@@ -91,7 +110,7 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
                         }}
                         className="text-sm truncate flex-1 text-left"
                       >
-                        {s.title}
+                        {formatSessionTitle(s.title)}
                       </button>
                       <button
                         onClick={(e) => {

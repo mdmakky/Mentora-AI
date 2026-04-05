@@ -95,6 +95,7 @@ const DocumentView = () => {
       <div className={`doc-view-chat ${!chatOpen ? 'collapsed' : ''}`}>
         {chatOpen && (
           <ChatPanel
+            key={currentDoc.id}
             courseId={currentDoc.course_id}
             documentId={currentDoc.id}
             documentName={currentDoc.file_name}

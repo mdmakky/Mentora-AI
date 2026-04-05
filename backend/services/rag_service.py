@@ -7,6 +7,8 @@ from core.database import get_supabase_admin
 
 settings = get_settings()
 genai_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_DIMENSION = 768
 
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=800,
@@ -45,10 +47,11 @@ def chunk_document(pages: List[dict], doc_id: str, doc_name: str) -> List[dict]:
 
 
 def generate_embedding(text: str) -> List[float]:
-    """Generate embedding using Google text-embedding-004."""
+    """Generate embedding using Google Gemini embedding model."""
     result = genai_client.models.embed_content(
-        model="text-embedding-004",
+        model=EMBEDDING_MODEL,
         contents=text,
+        config={"output_dimensionality": EMBEDDING_DIMENSION},
     )
     return result.embeddings[0].values
 
@@ -56,8 +59,9 @@ def generate_embedding(text: str) -> List[float]:
 def generate_query_embedding(text: str) -> List[float]:
     """Generate embedding for a query."""
     result = genai_client.models.embed_content(
-        model="text-embedding-004",
+        model=EMBEDDING_MODEL,
         contents=text,
+        config={"output_dimensionality": EMBEDDING_DIMENSION},
     )
     return result.embeddings[0].values
 
@@ -164,6 +168,14 @@ async def process_document_pipeline(
 
         # Store chunks with embeddings
         stored_count = await store_chunks_with_embeddings(chunks, course_id, user_id)
+
+        if stored_count == 0:
+            db.table("documents").update({
+                "processing_status": "failed",
+                "chunk_count": 0,
+                "page_count": len(pages),
+            }).eq("id", doc_id).execute()
+            return
 
         # Update document status
         db.table("documents").update({
