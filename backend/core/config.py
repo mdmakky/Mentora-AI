@@ -28,6 +28,17 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_URL: str = "http://localhost:8000"
 
+    # SMTP (traditional email delivery)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_USE_TLS: bool = True
+
+    # Debug (development only)
+    DEBUG_OTP_IN_RESPONSE: bool = False
+
     class Config:
         env_file = ".env"
         case_sensitive = True

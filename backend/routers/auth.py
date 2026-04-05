@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import secrets
+import uuid
 from schemas.auth import (
     UserRegister, UserLogin, UserProfile, ForgotPasswordRequest,
     ResetPasswordRequest, VerifyEmailRequest, TokenResponse, RefreshTokenRequest,
@@ -7,9 +9,29 @@ from schemas.auth import (
 from core.security import create_access_token, create_refresh_token, get_password_hash, verify_password, decode_token
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user
+from core.config import get_settings
 from services.cloudinary_service import upload_avatar
+from services.email_service import send_auth_email
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+settings = get_settings()
+
+
+def _generate_otp() -> str:
+    """Generate a 6-digit OTP code."""
+    return f"{secrets.randbelow(900000) + 100000}"
+
+
+def _otp_expiry(minutes: int = 10) -> str:
+    """Generate OTP expiry timestamp in ISO format."""
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+
+
+def _is_expired(expiry_iso: str) -> bool:
+    """Check if an ISO timestamp is already expired."""
+    if not expiry_iso:
+        return True
+    return datetime.now(timezone.utc) > datetime.fromisoformat(expiry_iso.replace("Z", "+00:00"))
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -22,30 +44,44 @@ async def register(data: UserRegister):
     if existing.data:
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Register with Supabase Auth
+    user_id = str(uuid.uuid4())
+    verification_code = _generate_otp()
+    verification_expiry = _otp_expiry(10)
+
+    # Create user profile
     try:
-        auth_result = db.auth.sign_up({
+        db.table("users").insert({
+            "id": user_id,
             "email": data.email,
-            "password": data.password,
-        })
-        user_id = auth_result.user.id
+            "full_name": data.full_name,
+            "university": data.university,
+            "department": data.department,
+            "password_hash": get_password_hash(data.password),
+            "email_verified": False,
+            "verification_code": verification_code,
+            "verification_code_expires_at": verification_expiry,
+        }).execute()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Registration failed: {str(e)}")
 
-    # Create user profile
-    db.table("users").insert({
-        "id": user_id,
-        "email": data.email,
-        "full_name": data.full_name,
-        "university": data.university,
-        "department": data.department,
-        "email_verified": False,
-    }).execute()
+    # Send OTP email (non-blocking for account creation)
+    try:
+        send_auth_email(
+            to_email=data.email,
+            subject="Mentora - Verify your email",
+            title="Verify Your Email",
+            intro="Use the following verification code to activate your Mentora account:",
+            code=verification_code,
+            note="This code expires in 10 minutes.",
+        )
+    except Exception:
+        pass
 
-    return {
+    response = {
         "message": "Registration successful. Please check your email to verify your account.",
         "user_id": user_id,
     }
+    return response
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -67,13 +103,8 @@ async def login(data: UserLogin):
             detail="Please verify your email before logging in. Check your inbox for verification link.",
         )
 
-    # Authenticate with Supabase
-    try:
-        auth_result = db.auth.sign_in_with_password({
-            "email": data.email,
-            "password": data.password,
-        })
-    except Exception:
+    stored_hash = user.get("password_hash")
+    if not stored_hash or not verify_password(data.password, stored_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Update last login
@@ -158,36 +189,82 @@ async def upload_user_avatar(
 
 @router.post("/forgot-password")
 async def forgot_password(data: ForgotPasswordRequest):
-    """Send password reset email."""
+    """Generate and send password reset code."""
     db = get_supabase_admin()
+    user_result = db.table("users").select("id, email").eq("email", data.email).single().execute()
+
     try:
-        db.auth.reset_password_email(data.email)
+        if user_result.data:
+            reset_code = _generate_otp()
+            reset_expiry = _otp_expiry(10)
+
+            db.table("users").update({
+                "reset_code": reset_code,
+                "reset_code_expires_at": reset_expiry,
+            }).eq("id", user_result.data["id"]).execute()
+
+            send_auth_email(
+                to_email=data.email,
+                subject="Mentora - Reset password",
+                title="Reset Your Password",
+                intro="Use the following code to reset your password:",
+                code=reset_code,
+                note="This code expires in 10 minutes.",
+            )
     except Exception:
         pass  # Don't reveal if email exists
-    return {"message": "If the email is registered, a reset link has been sent."}
+
+    return {"message": "If the email is registered, a password reset code has been sent."}
 
 
 @router.post("/reset-password")
 async def reset_password(data: ResetPasswordRequest):
-    """Reset password with token."""
-    db = get_supabase_admin()
+    """Reset password using recovery OTP code sent to email."""
+    admin_db = get_supabase_admin()
     try:
-        db.auth.update_user({"password": data.new_password})
+        user_result = admin_db.table("users").select("id, reset_code, reset_code_expires_at").eq("email", data.email).single().execute()
+        user = user_result.data
+
+        if not user or user.get("reset_code") != data.token or _is_expired(user.get("reset_code_expires_at")):
+            raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+
+        admin_db.table("users").update({
+            "password_hash": get_password_hash(data.new_password),
+            "reset_code": None,
+            "reset_code_expires_at": None,
+        }).eq("id", user["id"]).execute()
         return {"message": "Password changed successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Password reset failed: {str(e)}")
 
 
 @router.post("/verify-email")
 async def verify_email(data: VerifyEmailRequest):
-    """Verify email with token."""
-    db = get_supabase_admin()
+    """Verify signup email using OTP code sent to email."""
+    admin_db = get_supabase_admin()
     try:
-        # Verify with Supabase Auth
-        result = db.auth.verify_otp({"token_hash": data.token, "type": "email"})
-        if result and result.user:
-            db.table("users").update({"email_verified": True}).eq("id", result.user.id).execute()
-            return {"message": "Email verified successfully"}
+        user_result = admin_db.table("users").select("id, verification_code, verification_code_expires_at, email_verified").eq("email", data.email).single().execute()
+        user = user_result.data
+
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        if user.get("email_verified"):
+            return {"message": "Email is already verified"}
+
+        if user.get("verification_code") != data.token or _is_expired(user.get("verification_code_expires_at")):
+            raise HTTPException(status_code=400, detail="Invalid or expired verification code")
+
+        admin_db.table("users").update({
+            "email_verified": True,
+            "verification_code": None,
+            "verification_code_expires_at": None,
+        }).eq("id", user["id"]).execute()
+        return {"message": "Email verified successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Verification failed: {str(e)}")
 
@@ -197,7 +274,31 @@ async def resend_verification(data: ForgotPasswordRequest):
     """Resend verification email."""
     db = get_supabase_admin()
     try:
-        db.auth.resend({"type": "signup", "email": data.email})
+        user_result = db.table("users").select("id, email_verified").eq("email", data.email).single().execute()
+        user = user_result.data
+        if not user:
+            return {"message": "If the email is registered, a verification code has been sent."}
+
+        if user.get("email_verified"):
+            return {"message": "Email is already verified"}
+
+        verification_code = _generate_otp()
+        verification_expiry = _otp_expiry(10)
+
+        db.table("users").update({
+            "verification_code": verification_code,
+            "verification_code_expires_at": verification_expiry,
+        }).eq("id", user["id"]).execute()
+
+        send_auth_email(
+            to_email=data.email,
+            subject="Mentora - Verification code",
+            title="Verify Your Email",
+            intro="Use the following verification code:",
+            code=verification_code,
+            note="This code expires in 10 minutes.",
+        )
+
         return {"message": "Verification email sent"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to resend: {str(e)}")

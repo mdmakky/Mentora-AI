@@ -17,8 +17,13 @@ $$ LANGUAGE plpgsql;
 -- Table: users
 -- ============================================
 CREATE TABLE public.users (
-    id              UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email           TEXT NOT NULL UNIQUE,
+    password_hash   TEXT,
+    verification_code TEXT,
+    verification_code_expires_at TIMESTAMPTZ,
+    reset_code      TEXT,
+    reset_code_expires_at TIMESTAMPTZ,
     full_name       TEXT,
     university      TEXT,
     department      TEXT,
@@ -272,24 +277,8 @@ CREATE POLICY "session_owner" ON public.chat_messages FOR ALL USING (
     EXISTS (SELECT 1 FROM public.chat_sessions WHERE id = session_id AND user_id = auth.uid())
 );
 
--- Admin bypass policies
-CREATE POLICY "admin_access" ON public.users FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
-);
-CREATE POLICY "admin_access" ON public.documents FOR ALL USING (
-    auth.uid() = user_id OR
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
-);
-
--- Admin activity logs: insert and read only for admins
-CREATE POLICY "admin_insert_only" ON public.admin_activity_logs
-FOR INSERT WITH CHECK (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
-);
-CREATE POLICY "admin_read_only" ON public.admin_activity_logs
-FOR SELECT USING (
-    EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND is_admin = TRUE)
-);
+-- Admin access is handled by the backend using the Supabase service role key.
+-- Avoid self-referential RLS policies on public.users to prevent infinite recursion.
 
 -- ============================================
 -- Vector Similarity Search Function
