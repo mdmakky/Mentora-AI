@@ -18,8 +18,21 @@ import DocumentView from './pages/DocumentView';
 import ChatPage from './pages/ChatPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 
+// Admin pages
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminDocuments from './pages/admin/AdminDocuments';
+import AdminLogs from './pages/admin/AdminLogs';
+
+const AdminRoute = ({ children }) => {
+  const { user, isAuthenticated } = useAuthStore();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!user?.is_admin) return <Navigate to="/dashboard" replace />;
+  return children;
+};
+
 function App() {
-  const { isAuthenticated, getProfile } = useAuthStore();
+  const { isAuthenticated, getProfile, user } = useAuthStore();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -49,10 +62,28 @@ function App() {
           <Route path="/document/:docId" element={<DocumentView />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          
+          {/* Admin Routes */}
+          <Route path="/admin/dashboard" element={
+            <AdminRoute><AdminDashboard /></AdminRoute>
+          } />
+          <Route path="/admin/users" element={
+            <AdminRoute><AdminUsers /></AdminRoute>
+          } />
+          <Route path="/admin/documents" element={
+            <AdminRoute><AdminDocuments /></AdminRoute>
+          } />
+          <Route path="/admin/logs" element={
+            <AdminRoute><AdminLogs /></AdminRoute>
+          } />
         </Route>
 
         {/* Redirect root */}
-        <Route path="/" element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />} />
+        <Route path="/" element={
+          isAuthenticated 
+            ? <Navigate to={user?.is_admin ? '/admin/dashboard' : '/dashboard'} replace /> 
+            : <Navigate to="/login" replace />
+        } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

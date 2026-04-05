@@ -4,11 +4,14 @@ import {
   BookOpen,
   MessageSquare,
   BarChart3,
-  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
   GraduationCap,
+  ShieldCheck,
+  Users,
+  FileWarning,
+  Activity
 } from 'lucide-react';
 import useAuthStore from '../../stores/authStore';
 
@@ -61,6 +64,31 @@ const Sidebar = ({ collapsed, mobileOpen, onToggle, onMobileClose }) => {
             {!collapsed && <span>{item.label}</span>}
           </NavLink>
         ))}
+
+        {user?.is_admin && (
+          <>
+            {!collapsed && <div className="sidebar-section-title mt-6">Admin Panel</div>}
+            {[
+              { to: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck },
+              { to: '/admin/users', label: 'User Roles', icon: Users },
+              { to: '/admin/documents', label: 'Quarantine', icon: FileWarning },
+              { to: '/admin/logs', label: 'Activity Logs', icon: Activity },
+            ].map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                onClick={onMobileClose}
+                className={({ isActive }) =>
+                  `sidebar-link ${isActive ? 'active' : ''}`
+                }
+                title={collapsed ? item.label : undefined}
+              >
+                <item.icon size={20} className="sidebar-link-icon text-indigo-400" />
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
+          </>
+        )}
       </nav>
 
       {/* Footer */}

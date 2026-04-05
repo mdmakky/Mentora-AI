@@ -11,6 +11,7 @@ from services.pdf_service import (
 )
 from services.copyright_service import run_copyright_check
 from services.rag_service import process_document_pipeline
+from services.conversion_service import convert_to_pdf
 import uuid
 import httpx
 
@@ -55,6 +56,20 @@ async def upload_document(
     dup_check = db.table("documents").select("id").eq("file_hash", file_hash).eq("user_id", user["id"]).eq("is_deleted", False).execute()
     if dup_check.data:
         raise HTTPException(status_code=400, detail="This file has already been uploaded")
+
+    # Auto-convert DOCX and PPTX files to PDF using LibreOffice
+    if file_type in ["docx", "pptx"]:
+        try:
+            file_bytes = convert_to_pdf(file_bytes, file_type)
+            file_type = "pdf"
+            # Switch filename extension cleanly
+            import os
+            base_name, _ = os.path.splitext(file.filename)
+            file.filename = f"{base_name}.pdf"
+            # Re-calculate hash based on the new PDF binary
+            file_hash = calculate_file_hash(file_bytes)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to auto-convert document to PDF format: {str(e)}")
 
     # Get page count for PDF
     page_count = 0

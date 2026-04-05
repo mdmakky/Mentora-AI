@@ -20,7 +20,12 @@ const Login = () => {
     setLoading(false);
 
     if (result.success) {
-      navigate('/dashboard'); // or wherever after login
+      const userState = useAuthStore.getState().user;
+      if (userState?.is_admin) {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } else {
       setError(result.error);
     }
