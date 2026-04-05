@@ -4,7 +4,8 @@ import useDocumentStore from '../../stores/documentStore';
 
 const statusConfig = {
   pending: { label: 'Processing', icon: Loader2, cls: 'badge-warning', spin: true },
-  completed: { label: 'Ready', icon: CheckCircle, cls: 'badge-success' },
+  processing: { label: 'Processing', icon: Loader2, cls: 'badge-warning', spin: true },
+  ready: { label: 'Ready', icon: CheckCircle, cls: 'badge-success' },
   quarantined: { label: 'Flagged', icon: AlertTriangle, cls: 'badge-danger' },
   failed: { label: 'Failed', icon: AlertTriangle, cls: 'badge-danger' },
 };
@@ -28,7 +29,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
   const status = statusConfig[doc.processing_status] || statusConfig.pending;
 
   const handleClick = () => {
-    if (doc.processing_status === 'completed') {
+    if (doc.processing_status === 'ready') {
       navigate(`/document/${doc.id}`);
     }
   };
@@ -45,7 +46,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
       <div
         onClick={handleClick}
         className={`card flex items-center gap-4 px-4 py-3 group ${
-          doc.processing_status === 'completed' ? 'card-interactive cursor-pointer' : 'opacity-75'
+          doc.processing_status === 'ready' ? 'card-interactive cursor-pointer' : 'opacity-75'
         }`}
       >
         <span className="text-xl">{typeIcons[doc.file_type] || '📄'}</span>
@@ -75,7 +76,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
     <div
       onClick={handleClick}
       className={`card overflow-hidden group ${
-        doc.processing_status === 'completed' ? 'card-interactive cursor-pointer' : 'opacity-75'
+        doc.processing_status === 'ready' ? 'card-interactive cursor-pointer' : 'opacity-75'
       }`}
     >
       {/* Preview area */}

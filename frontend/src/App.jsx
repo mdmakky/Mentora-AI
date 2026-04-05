@@ -12,8 +12,11 @@ import ResetPassword from './components/ResetPassword';
 // App layout + pages
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './components/Dashboard';
+import CoursesPage from './pages/CoursesPage';
 import CourseView from './pages/CourseView';
 import DocumentView from './pages/DocumentView';
+import ChatPage from './pages/ChatPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 function App() {
   const { isAuthenticated, getProfile } = useAuthStore();
@@ -41,11 +44,11 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/courses" element={<Dashboard />} />
+          <Route path="/courses" element={<CoursesPage />} />
           <Route path="/course/:courseId" element={<CourseView />} />
           <Route path="/document/:docId" element={<DocumentView />} />
-          <Route path="/chat" element={<Dashboard />} />
-          <Route path="/analytics" element={<Dashboard />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
         </Route>
 
         {/* Redirect root */}

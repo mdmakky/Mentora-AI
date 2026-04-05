@@ -43,15 +43,18 @@ async def get_current_user(
             detail="User not found",
         )
 
-    user = result.data
+    return result.data
 
-    # Check if user is suspended
+
+async def check_upload_allowed(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Ensure the current user is not upload-suspended. Use on upload routes only."""
     if user.get("is_upload_suspended"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is suspended. Contact admin for assistance.",
+            detail="Your upload access has been suspended. Contact admin for assistance.",
         )
-
     return user
 
 

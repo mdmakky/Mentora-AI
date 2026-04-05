@@ -36,8 +36,10 @@ const useDocumentStore = create((set, get) => ({
 
   getDocumentUrl: async (docId) => {
     try {
-      const data = await apiClient.get(`/documents/${docId}/url`);
-      return data?.url || null;
+      // Use the backend proxy endpoint for reliable in-browser PDF rendering
+      const token = localStorage.getItem('token');
+      const base = import.meta.env.VITE_API_BASE || '/api/v1';
+      return `${base}/documents/${docId}/proxy?token=${encodeURIComponent(token)}`;
     } catch {
       return null;
     }
@@ -109,6 +111,38 @@ const useDocumentStore = create((set, get) => ({
     } catch (err) {
       return { success: false, error: err.message };
     }
+  },
+
+  // ─── Status Polling ────────────────────────────
+  pollDocumentStatus: (docId) => {
+    const interval = setInterval(async () => {
+      try {
+        const data = await apiClient.get(`/documents/${docId}/status`);
+        if (data && (data.processing_status === 'ready' || data.processing_status === 'failed')) {
+          clearInterval(interval);
+          // Update the document in our list
+          set((s) => ({
+            documents: s.documents.map((d) =>
+              d.id === docId
+                ? { ...d, processing_status: data.processing_status, chunk_count: data.chunk_count }
+                : d
+            ),
+          }));
+        } else if (data) {
+          set((s) => ({
+            documents: s.documents.map((d) =>
+              d.id === docId
+                ? { ...d, processing_status: data.processing_status }
+                : d
+            ),
+          }));
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+        clearInterval(interval);
+      }
+    }, 3000);
+    return interval;
   },
 
   clearCurrentDoc: () => set({ currentDoc: null }),

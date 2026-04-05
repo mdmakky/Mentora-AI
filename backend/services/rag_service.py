@@ -1,12 +1,12 @@
 import json
 from typing import List, Optional
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-import google.generativeai as genai
+from google import genai
 from core.config import get_settings
 from core.database import get_supabase_admin
 
 settings = get_settings()
-genai.configure(api_key=settings.GOOGLE_API_KEY)
+genai_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=800,
@@ -46,22 +46,20 @@ def chunk_document(pages: List[dict], doc_id: str, doc_name: str) -> List[dict]:
 
 def generate_embedding(text: str) -> List[float]:
     """Generate embedding using Google text-embedding-004."""
-    result = genai.embed_content(
-        model="models/text-embedding-004",
-        content=text,
-        task_type="retrieval_document",
+    result = genai_client.models.embed_content(
+        model="text-embedding-004",
+        contents=text,
     )
-    return result["embedding"]
+    return result.embeddings[0].values
 
 
 def generate_query_embedding(text: str) -> List[float]:
     """Generate embedding for a query."""
-    result = genai.embed_content(
-        model="models/text-embedding-004",
-        content=text,
-        task_type="retrieval_query",
+    result = genai_client.models.embed_content(
+        model="text-embedding-004",
+        contents=text,
     )
-    return result["embedding"]
+    return result.embeddings[0].values
 
 
 async def store_chunks_with_embeddings(
@@ -107,24 +105,25 @@ async def search_similar_chunks(
 ) -> List[dict]:
     """Search for similar chunks using pgvector cosine similarity."""
     db = get_supabase_admin()
-    query_embedding = generate_query_embedding(query)
-
-    # Use Supabase RPC for vector similarity search
-    params = {
-        "query_embedding": query_embedding,
-        "match_user_id": user_id,
-        "match_course_id": course_id,
-        "match_count": top_k,
-    }
-
-    if document_ids:
-        params["match_document_ids"] = document_ids
 
     try:
+        query_embedding = generate_query_embedding(query)
+
+        # Use Supabase RPC for vector similarity search
+        params = {
+            "query_embedding": query_embedding,
+            "match_user_id": user_id,
+            "match_course_id": course_id,
+            "match_count": top_k,
+        }
+
+        if document_ids:
+            params["match_document_ids"] = document_ids
+
         result = db.rpc("match_document_chunks", params).execute()
         return result.data or []
     except Exception as e:
-        print(f"Vector search error: {e}")
+        print(f"Vector search or embedding error: {e}")
         # Fallback: basic text search
         return []
 

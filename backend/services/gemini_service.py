@@ -1,9 +1,12 @@
-import google.generativeai as genai
+from google import genai
 from typing import List, Optional
 from core.config import get_settings
+import time
 
 settings = get_settings()
-genai.configure(api_key=settings.GOOGLE_API_KEY)
+client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+
+MODEL = "gemini-2.0-flash"
 
 
 SYSTEM_PROMPT = """You are an academic AI assistant for university students named Mentora.
@@ -66,6 +69,28 @@ def build_conversation_history(messages: List[dict], limit: int = 5) -> str:
     return "\n".join(history_parts)
 
 
+def _generate_with_retry(prompt: str, max_retries: int = 3) -> str:
+    """Generate content with retry logic for rate limits."""
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+            )
+            return response.text
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+                wait_time = (2 ** attempt) * 5  # 5, 10, 20 seconds
+                print(f"Rate limited, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"Gemini API Error: {e}")
+                raise
+    raise Exception("Max retries exceeded due to rate limiting")
+
+
 async def generate_chat_response(
     question: str,
     context_chunks: List[dict],
@@ -87,10 +112,11 @@ CONVERSATION HISTORY:
 
 STUDENT'S QUESTION: {question}"""
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
-
-    return response.text
+    try:
+        return _generate_with_retry(prompt)
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return "Sorry, I'm currently experiencing technical difficulties connecting to the AI. Please try again in a moment."
 
 
 async def generate_summary(text: str, summary_type: str = "full", language: str = "en") -> str:
@@ -111,9 +137,11 @@ Include main topics, key concepts, and important details.
 Content:
 {text[:15000]}"""
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
-    return response.text
+    try:
+        return _generate_with_retry(prompt)
+    except Exception as e:
+        print(f"Summary generation error: {e}")
+        return "Failed to generate summary. Please try again."
 
 
 async def generate_questions(
@@ -147,9 +175,11 @@ Return a JSON array of questions.
 Content:
 {text[:15000]}"""
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
-    return response.text
+    try:
+        return _generate_with_retry(prompt)
+    except Exception as e:
+        print(f"Question generation error: {e}")
+        return "[]"
 
 
 async def predict_exam_questions(texts: List[str], course_name: str) -> str:
@@ -171,6 +201,9 @@ Format as JSON array.
 Materials:
 {combined}"""
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
-    return response.text
+    try:
+        return _generate_with_retry(prompt)
+    except Exception as e:
+        print(f"Exam prediction error: {e}")
+        return "[]"
+

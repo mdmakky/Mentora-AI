@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Upload, FolderPlus, FileText, LayoutGrid, List,
@@ -26,7 +26,22 @@ const CourseView = () => {
   const [folderName, setFolderName] = useState('');
 
   const getCourse = useCourseStore((s) => s.getCourse);
-  const { documents, folders, fetchDocuments, fetchFolders, createFolder } = useDocumentStore();
+  const { documents, folders, fetchDocuments, fetchFolders, createFolder, pollDocumentStatus } = useDocumentStore();
+  const pollIntervalsRef = useRef([]);
+
+  // Start polling for documents that are still processing
+  const startPollingPending = (docs) => {
+    // Clear old intervals
+    pollIntervalsRef.current.forEach(clearInterval);
+    pollIntervalsRef.current = [];
+    
+    (docs || []).forEach((doc) => {
+      if (doc.processing_status === 'pending' || doc.processing_status === 'processing') {
+        const interval = pollDocumentStatus(doc.id);
+        pollIntervalsRef.current.push(interval);
+      }
+    });
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -40,7 +55,16 @@ const CourseView = () => {
       setLoading(false);
     };
     load();
+
+    return () => {
+      pollIntervalsRef.current.forEach(clearInterval);
+    };
   }, [courseId, getCourse, fetchDocuments, fetchFolders]);
+
+  // Whenever documents change, start polling for any pending ones
+  useEffect(() => {
+    startPollingPending(documents);
+  }, [documents.length]);
 
   const handleFolderSelect = (folderId) => {
     setActiveFolder(folderId);

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from schemas.document import DocumentUpdate, DocumentResponse
 from core.database import get_supabase_admin
-from core.dependencies import get_current_user
-from services.cloudinary_service import upload_file, get_signed_url, delete_file
+from core.dependencies import get_current_user, check_upload_allowed
+from services.supabase_storage_service import upload_document as upload_file, delete_document as delete_file
 from services.pdf_service import (
     extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx,
     calculate_file_hash, get_pdf_page_count,
@@ -11,6 +12,7 @@ from services.pdf_service import (
 from services.copyright_service import run_copyright_check
 from services.rag_service import process_document_pipeline
 import uuid
+import httpx
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -26,13 +28,9 @@ async def upload_document(
     folder_id: Optional[str] = Form(None),
     doc_category: str = Form("lecture"),
     declaration_accepted: bool = Form(False),
-    user: dict = Depends(get_current_user),
+    user: dict = Depends(check_upload_allowed),
 ):
     """Upload a document with anti-piracy checks."""
-    # Check user upload suspension
-    if user.get("is_upload_suspended"):
-        raise HTTPException(status_code=403, detail="Your upload access has been suspended")
-
     # Validate declaration
     if not declaration_accepted:
         raise HTTPException(status_code=400, detail="You must accept the anti-piracy declaration")
@@ -63,7 +61,7 @@ async def upload_document(
     if file_type == "pdf":
         page_count = get_pdf_page_count(file_bytes)
 
-    # Upload to Cloudinary
+    # Upload to Supabase Storage
     cloud_result = upload_file(file_bytes, user["id"], course_id, doc_id, file.filename)
 
     # Run copyright check
@@ -149,14 +147,72 @@ async def get_document_status(doc_id: str, user: dict = Depends(get_current_user
 
 @router.get("/{doc_id}/url")
 async def get_document_url(doc_id: str, user: dict = Depends(get_current_user)):
-    """Generate a signed URL for document access."""
+    """Return the secure URL for document access."""
     db = get_supabase_admin()
-    result = db.table("documents").select("cloudinary_public_id").eq("id", doc_id).eq("user_id", user["id"]).single().execute()
+    result = db.table("documents").select("cloudinary_url").eq("id", doc_id).eq("user_id", user["id"]).single().execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    signed_url = get_signed_url(result.data["cloudinary_public_id"])
-    return {"url": signed_url}
+    return {"url": result.data["cloudinary_url"]}
+
+
+@router.get("/{doc_id}/proxy")
+async def proxy_document(doc_id: str, token: Optional[str] = None, user: dict = None):
+    """Stream the document binary from Cloudinary with correct headers for in-browser PDF rendering."""
+    # Support token via query param for react-pdf (can't set Authorization headers)
+    if user is None:
+        if not token:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        from core.security import decode_token
+        payload = decode_token(token)
+        if not payload or payload.get("type") != "access":
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = {"id": user_id}
+
+    db = get_supabase_admin()
+    result = db.table("documents").select("cloudinary_url, cloudinary_public_id, file_type, file_name").eq("id", doc_id).eq("user_id", user["id"]).single().execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_type = result.data.get("file_type", "pdf")
+    file_name = result.data.get("file_name", "document")
+    public_id = result.data.get("cloudinary_public_id")
+
+    content_types = {
+        "pdf": "application/pdf",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }
+
+    # Download document from Supabase storage using the path (stored in public_id)
+    try:
+        if public_id:
+            file_bytes = db.storage.from_("mentora-docs").download(public_id)
+        else:
+            # Fallback for old cloudinary documents (which might fail, but added for safety)
+            raise HTTPException(status_code=502, detail="Document format not supported for delivery. Please re-upload.")
+            
+        if not file_bytes or len(file_bytes) == 0:
+             raise HTTPException(status_code=502, detail="Document storage returned empty file")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch document from storage: {str(e)}")
+
+    from fastapi.responses import Response
+    return Response(
+        content=file_bytes,
+        media_type=content_types.get(file_type, "application/octet-stream"),
+        headers={
+            "Content-Disposition": f'inline; filename="{file_name}"',
+            "Content-Length": str(len(file_bytes)),
+            "Cache-Control": "private, max-age=3600",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
 
 
 @router.put("/{doc_id}", response_model=DocumentResponse)
@@ -186,7 +242,8 @@ async def delete_document(doc_id: str, user: dict = Depends(get_current_user)):
     # Delete chunks
     db.table("document_chunks").delete().eq("document_id", doc_id).execute()
 
-    # Delete from Cloudinary
+    # Delete from Supabase Storage
     delete_file(doc.data["cloudinary_public_id"])
 
     return {"message": "Document deleted"}
+
