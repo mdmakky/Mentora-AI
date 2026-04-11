@@ -13,38 +13,6 @@ services:
     instance_size_slug: basic-xxs
     build_command: pip install -r requirements.txt
     run_command: uvicorn main:app --host 0.0.0.0 --port 8080
-    envs:
-      - key: SUPABASE_URL
-        value: "${SUPABASE_URL}"
-        type: SECRET
-      - key: SUPABASE_ANON_KEY
-        value: "${SUPABASE_ANON_KEY}"
-        type: SECRET
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        value: "${SUPABASE_SERVICE_ROLE_KEY}"
-        type: SECRET
-      - key: SUPABASE_DB_URL
-        value: "${SUPABASE_DB_URL}"
-        type: SECRET
-      - key: JWT_SECRET_KEY
-        value: "${JWT_SECRET_KEY}"
-        type: SECRET
-      - key: CLOUDINARY_CLOUD_NAME
-        value: "${CLOUDINARY_CLOUD_NAME}"
-        type: SECRET
-      - key: CLOUDINARY_API_KEY
-        value: "${CLOUDINARY_API_KEY}"
-        type: SECRET
-      - key: CLOUDINARY_API_SECRET
-        value: "${CLOUDINARY_API_SECRET}"
-        type: SECRET
-      - key: GOOGLE_API_KEY
-        value: "${GOOGLE_API_KEY}"
-        type: SECRET
-      - key: FRONTEND_URL
-        value: "https://mentora-ai.app"
-      - key: BACKEND_URL
-        value: "https://mentora-ai.app"
 
 static_sites:
   - name: web
