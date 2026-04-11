@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /contact
+
+Disallow: /dashboard
+Disallow: /courses
+Disallow: /chat
+Disallow: /analytics
+Disallow: /profile
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://mentora-ai.app/sitemap.xml
