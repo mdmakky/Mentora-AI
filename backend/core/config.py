@@ -32,13 +32,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     BACKEND_URL: str = "http://localhost:8000"
 
-    # SMTP (traditional email delivery)
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = ""
-    SMTP_USE_TLS: bool = True
+    # Brevo (transactional email via HTTP API — works on DigitalOcean)
+    BREVO_API_KEY: str = ""
+    SMTP_FROM_EMAIL: str = ""  # Must be a verified sender in Brevo
 
     # Debug (development only)
     DEBUG_OTP_IN_RESPONSE: bool = False

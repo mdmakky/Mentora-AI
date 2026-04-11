@@ -193,16 +193,16 @@ async def forgot_password(data: ForgotPasswordRequest):
     db = get_supabase_admin()
     user_result = db.table("users").select("id, email").eq("email", data.email).single().execute()
 
-    try:
-        if user_result.data:
-            reset_code = _generate_otp()
-            reset_expiry = _otp_expiry(10)
+    if user_result.data:
+        reset_code = _generate_otp()
+        reset_expiry = _otp_expiry(10)
 
-            db.table("users").update({
-                "reset_code": reset_code,
-                "reset_code_expires_at": reset_expiry,
-            }).eq("id", user_result.data["id"]).execute()
+        db.table("users").update({
+            "reset_code": reset_code,
+            "reset_code_expires_at": reset_expiry,
+        }).eq("id", user_result.data["id"]).execute()
 
+        try:
             send_auth_email(
                 to_email=data.email,
                 subject="Mentora - Reset password",
@@ -211,8 +211,10 @@ async def forgot_password(data: ForgotPasswordRequest):
                 code=reset_code,
                 note="This code expires in 10 minutes.",
             )
-    except Exception:
-        pass  # Don't reveal if email exists
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to send password reset email: {e}")
+            raise HTTPException(status_code=500, detail="Failed to send reset email. Please try again later.")
 
     return {"message": "If the email is registered, a password reset code has been sent."}
 
