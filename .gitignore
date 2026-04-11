@@ -3,10 +3,6 @@
 .env.*
 !.env.example
 
-# Local deploy spec with secrets (never commit!)
-digitalocean/app-deploy.yaml
-!.env.example
-
 # Python virtual environments
 .venv/
 venv/

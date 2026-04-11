@@ -1,4 +1,4 @@
-name: Deploy to DigitalOcean
+name: Deploy to Droplet
 
 on:
   push:
@@ -7,23 +7,41 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
-      - "digitalocean/**"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 jobs:
   deploy:
-    name: Deploy app
+    name: Deploy to DigitalOcean Droplet
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.1
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          host: ${{ secrets.DROPLET_IP }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
 
-      - name: Deploy App Platform spec
-        run: doctl apps update ${{ secrets.DIGITALOCEAN_APP_ID }} --spec digitalocean/app.yaml --wait
+            cd /var/www/mentora
+
+            # Pull latest code
+            git pull origin main
+
+            # Backend: install dependencies & restart
+            cd /var/www/mentora/backend
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+            deactivate
+            sudo systemctl restart mentora-backend
+
+            # Frontend: build & deploy
+            cd /var/www/mentora/frontend
+            npm install --quiet
+            npm run build
+            sudo systemctl reload nginx
+
+            echo "✅ Deployment complete!"
