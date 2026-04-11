@@ -3,6 +3,10 @@ region: nyc
 
 services:
   - name: api
+    github:
+      repo: mdmakky/Mentora-AI
+      branch: main
+      deploy_on_push: true
     source_dir: backend
     http_port: 8080
     instance_count: 1
@@ -12,6 +16,10 @@ services:
 
 static_sites:
   - name: web
+    github:
+      repo: mdmakky/Mentora-AI
+      branch: main
+      deploy_on_push: true
     source_dir: frontend
     build_command: npm install && npm run build
     output_dir: dist
