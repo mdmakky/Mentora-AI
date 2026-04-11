@@ -113,6 +113,18 @@ const useDocumentStore = create((set, get) => ({
     }
   },
 
+  renameFolder: async (folderId, name) => {
+    try {
+      const data = await apiClient.put(`/folders/${folderId}`, { name });
+      set((s) => ({
+        folders: s.folders.map((f) => f.id === folderId ? { ...f, name } : f),
+      }));
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
   // ─── Status Polling ────────────────────────────
   pollDocumentStatus: (docId) => {
     const interval = setInterval(async () => {

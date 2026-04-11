@@ -101,6 +101,19 @@ const useAuthStore = create((set, get) => ({
     set({ user: null, token: null, isAuthenticated: false });
   },
 
+  updateProfile: async (data) => {
+    const token = localStorage.getItem('token');
+    try {
+      const response = await axios.put(`${API_BASE}/profile`, data, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      set({ user: sanitizeUser(response.data) });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error, 'Failed to update profile') };
+    }
+  },
+
   refreshToken: async () => {
     const refreshToken = localStorage.getItem('refreshToken');
     if (!refreshToken) return false;

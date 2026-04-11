@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, File, Trash2, Clock, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { Trash2, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import useDocumentStore from '../../stores/documentStore';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 const statusConfig = {
   pending: { label: 'Processing', icon: Loader2, cls: 'badge-warning', spin: true },
@@ -27,6 +29,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
   const navigate = useNavigate();
   const deleteDocument = useDocumentStore((s) => s.deleteDocument);
   const status = statusConfig[doc.processing_status] || statusConfig.pending;
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleClick = () => {
     if (doc.processing_status === 'ready') {
@@ -34,11 +37,13 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
     }
   };
 
-  const handleDelete = async (e) => {
+  const handleDelete = (e) => {
     e.stopPropagation();
-    if (confirm('Delete this document?')) {
-      await deleteDocument(doc.id);
-    }
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    await deleteDocument(doc.id);
   };
 
   if (viewMode === 'list') {
@@ -73,38 +78,48 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
   }
 
   return (
-    <div
-      onClick={handleClick}
-      className={`card overflow-hidden group ${
-        doc.processing_status === 'ready' ? 'card-interactive cursor-pointer' : 'opacity-75'
-      }`}
-    >
-      {/* Preview area */}
-      <div className="h-32 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center relative">
-        <span className="text-4xl">{typeIcons[doc.file_type] || '📄'}</span>
-        <span className={`badge ${status.cls} absolute top-2 right-2 text-[10px]`}>
-          {status.spin ? <Loader2 size={10} className="animate-spin mr-1" /> : <status.icon size={10} className="mr-1" />}
-          {status.label}
-        </span>
-      </div>
+    <>
+      <div
+        onClick={handleClick}
+        className={`card overflow-hidden group ${
+          doc.processing_status === 'ready' ? 'card-interactive cursor-pointer' : 'opacity-75'
+        }`}
+      >
+        {/* Preview area */}
+        <div className="h-32 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center relative">
+          <span className="text-4xl">{typeIcons[doc.file_type] || '📄'}</span>
+          <span className={`badge ${status.cls} absolute top-2 right-2 text-[10px]`}>
+            {status.spin ? <Loader2 size={10} className="animate-spin mr-1" /> : <status.icon size={10} className="mr-1" />}
+            {status.label}
+          </span>
+        </div>
 
-      <div className="p-3.5">
-        <p className="text-sm font-semibold text-slate-900 truncate group-hover:text-emerald-700 transition mb-1">
-          {doc.file_name}
-        </p>
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-500">
-            {formatSize(doc.file_size)} · {doc.page_count} pg
+        <div className="p-3.5">
+          <p className="text-sm font-semibold text-slate-900 truncate group-hover:text-emerald-700 transition mb-1">
+            {doc.file_name}
           </p>
-          <button
-            onClick={handleDelete}
-            className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-rose-500 transition"
-          >
-            <Trash2 size={13} />
-          </button>
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500">
+              {formatSize(doc.file_size)} · {doc.page_count} pg
+            </p>
+            <button
+              onClick={handleDelete}
+              className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-rose-500 transition"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      <ConfirmDialog
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Document?"
+        message={`"${doc.file_name}" will be permanently deleted along with all its AI data.`}
+        confirmLabel="Delete"
+      />
+    </>
   );
 };
 

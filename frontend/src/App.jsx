@@ -9,6 +9,11 @@ import VerifyEmail from './components/VerifyEmail';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 
+// Public pages
+import LandingPage from './pages/LandingPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
+
 // App layout + pages
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './components/Dashboard';
@@ -17,6 +22,7 @@ import CourseView from './pages/CourseView';
 import DocumentView from './pages/DocumentView';
 import ChatPage from './pages/ChatPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import ProfilePage from './pages/ProfilePage';
 
 // Admin pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -43,7 +49,16 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* Public auth routes */}
+        {/* Public pages */}
+        <Route path="/" element={
+          isAuthenticated
+            ? <Navigate to={user?.is_admin ? '/admin/dashboard' : '/dashboard'} replace />
+            : <LandingPage />
+        } />
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+
+        {/* Auth routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
@@ -62,28 +77,15 @@ function App() {
           <Route path="/document/:docId" element={<DocumentView />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
-          
+          <Route path="/profile" element={<ProfilePage />} />
+
           {/* Admin Routes */}
-          <Route path="/admin/dashboard" element={
-            <AdminRoute><AdminDashboard /></AdminRoute>
-          } />
-          <Route path="/admin/users" element={
-            <AdminRoute><AdminUsers /></AdminRoute>
-          } />
-          <Route path="/admin/documents" element={
-            <AdminRoute><AdminDocuments /></AdminRoute>
-          } />
-          <Route path="/admin/logs" element={
-            <AdminRoute><AdminLogs /></AdminRoute>
-          } />
+          <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+          <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+          <Route path="/admin/documents" element={<AdminRoute><AdminDocuments /></AdminRoute>} />
+          <Route path="/admin/logs" element={<AdminRoute><AdminLogs /></AdminRoute>} />
         </Route>
 
-        {/* Redirect root */}
-        <Route path="/" element={
-          isAuthenticated 
-            ? <Navigate to={user?.is_admin ? '/admin/dashboard' : '/dashboard'} replace /> 
-            : <Navigate to="/login" replace />
-        } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

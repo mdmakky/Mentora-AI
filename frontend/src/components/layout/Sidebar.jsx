@@ -94,15 +94,22 @@ const Sidebar = ({ collapsed, mobileOpen, onToggle, onMobileClose }) => {
       {/* Footer */}
       <div className="sidebar-footer">
         {!collapsed && user && (
-          <div className="flex items-center gap-3 mb-4 px-1">
-            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-              {user.full_name?.charAt(0)?.toUpperCase() || 'U'}
+          <NavLink
+            to="/profile"
+            onClick={onMobileClose}
+            className="flex items-center gap-3 mb-4 px-1 rounded-xl p-2 hover:bg-white/10 transition cursor-pointer"
+          >
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden">
+              {user.avatar_url
+                ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                : user.full_name?.charAt(0)?.toUpperCase() || 'U'
+              }
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-white truncate">{user.full_name || 'User'}</p>
               <p className="text-xs text-slate-400 truncate">{user.email}</p>
             </div>
-          </div>
+          </NavLink>
         )}
         <button
           onClick={handleLogout}
