@@ -52,17 +52,17 @@ const Dashboard = () => {
   return (
     <div className="app-content animate-fade-in">
       {/* Hero greeting */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-1">
+      <div className="mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1">
           {greeting()}, {user?.full_name?.split(' ')[0] || 'there'} 👋
         </h1>
-        <p className="text-slate-500">
+        <p className="text-slate-500 text-sm sm:text-base">
           Welcome back to Mentora. Here{"'"}s your study overview.
         </p>
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         {[
           { label: 'Courses', value: stats.course_count, icon: BookOpen, color: 'bg-emerald-50 text-emerald-600' },
           { label: 'Documents', value: stats.document_count, icon: FileText, color: 'bg-blue-50 text-blue-600' },
@@ -82,8 +82,8 @@ const Dashboard = () => {
       </div>
 
       {/* Semesters header */}
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-xl font-bold text-slate-900">My Semesters</h2>
+      <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3 mb-4 sm:mb-5">
+        <h2 className="text-lg sm:text-xl font-bold text-slate-900">My Semesters</h2>
         <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus size={16} /> Add Semester
         </Button>

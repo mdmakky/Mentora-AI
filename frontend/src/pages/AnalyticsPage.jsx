@@ -46,9 +46,9 @@ const AnalyticsPage = () => {
   return (
     <div className="app-content animate-fade-in">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-1">Study Analytics</h1>
-        <p className="text-slate-500">Track your progress and build consistent study habits.</p>
+      <div className="mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1">Study Analytics</h1>
+        <p className="text-slate-500 text-sm">Track your progress and build consistent study habits.</p>
       </div>
 
       {/* Stats Cards */}
@@ -116,13 +116,13 @@ const AnalyticsPage = () => {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {/* Weekly Bar Chart */}
         <div className="lg:col-span-2 card p-6">
           <h3 className="text-sm font-bold text-slate-800 mb-1">Weekly Study Time</h3>
           <p className="text-xs text-slate-400 mb-4">Minutes studied per day this week</p>
           {weeklyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={weeklyData} barSize={36}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis
@@ -220,7 +220,7 @@ const AnalyticsPage = () => {
       <div className="card p-6">
         <h3 className="text-sm font-bold text-slate-800 mb-1">Daily Goals</h3>
         <p className="text-xs text-slate-400 mb-4">Whether you met your daily study goal each day this week</p>
-        <div className="grid grid-cols-7 gap-3">
+        <div className="grid grid-cols-7 gap-1 sm:gap-3">
           {weeklyData.map((day) => (
             <div
               key={day.date}
@@ -228,7 +228,7 @@ const AnalyticsPage = () => {
             >
               <span className="text-[10px] font-medium text-slate-400 uppercase">{day.day}</span>
               <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold transition-all ${
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-xs sm:text-sm font-bold transition-all ${
                   day.goal_achieved
                     ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-200'
                     : day.total_minutes > 0

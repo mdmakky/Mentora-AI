@@ -53,9 +53,9 @@ const CoursesPage = () => {
   return (
     <div className="app-content animate-fade-in">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900 mb-1">My Courses</h1>
-        <p className="text-slate-500">All your courses across semesters in one place.</p>
+      <div className="mb-5 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1">My Courses</h1>
+        <p className="text-slate-500 text-sm">All your courses across semesters in one place.</p>
       </div>
 
       {/* Search & Filters */}
@@ -121,7 +121,7 @@ const CoursesPage = () => {
           }
         />
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {filtered.map((course, i) => (
             <div
               key={course.id}
