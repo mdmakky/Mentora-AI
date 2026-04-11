@@ -32,4 +32,3 @@ ingress:
 
 domains:
   - domain: mentora-ai.app
-    type: primary
