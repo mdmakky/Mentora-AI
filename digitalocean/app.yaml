@@ -1,0 +1,36 @@
+name: mentora
+region: nyc
+
+services:
+  - name: api
+    source_dir: backend
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    build_command: pip install -r requirements.txt
+    run_command: uvicorn main:app --host 0.0.0.0 --port 8080
+
+static_sites:
+  - name: web
+    source_dir: frontend
+    build_command: npm install && npm run build
+    output_dir: dist
+    catchall_document: index.html
+
+ingress:
+  rules:
+    - match:
+        path:
+          prefix: /api
+      component:
+        name: api
+      preserve_path_prefix: true
+    - match:
+        path:
+          prefix: /
+      component:
+        name: web
+
+domains:
+  - domain: mentora-ai.app
+    type: primary

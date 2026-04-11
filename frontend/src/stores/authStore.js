@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_AUTH_API_BASE || 'http://127.0.0.1:8000/api/v1/auth';
+const API_BASE = import.meta.env.VITE_AUTH_API_BASE || '/api/v1/auth';
 
 const getErrorMessage = (error, fallback) => {
   const detail = error?.response?.data?.detail;
