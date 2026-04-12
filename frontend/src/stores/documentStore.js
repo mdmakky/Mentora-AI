@@ -1,7 +1,11 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { apiClient } from '../lib/apiClient';
+import { getSmartStorage } from '../lib/customStorage';
 
-const useDocumentStore = create((set, get) => ({
+const useDocumentStore = create(
+  persist(
+    (set, get) => ({
   documents: [],
   folders: [],
   currentDoc: null,
@@ -167,6 +171,12 @@ const useDocumentStore = create((set, get) => ({
   },
 
   clearCurrentDoc: () => set({ currentDoc: null }),
-}));
+}),
+    {
+      name: 'mentora-document-store',
+      storage: getSmartStorage(),
+    }
+  )
+);
 
 export default useDocumentStore;

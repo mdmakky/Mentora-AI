@@ -111,9 +111,18 @@ const Dashboard = () => {
       </div>
 
       {/* Semesters list */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Spinner size="lg" />
+      {loading && semesters.length === 0 ? (
+        <div className="space-y-6">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="animate-pulse">
+              <div className="h-6 w-48 bg-slate-200 rounded mb-4" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <div key={j} className="h-32 bg-slate-100 rounded-xl" />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : semesters.length === 0 ? (
         <EmptyState

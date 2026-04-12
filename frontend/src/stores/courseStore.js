@@ -1,7 +1,11 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { apiClient } from '../lib/apiClient';
+import { getSmartStorage } from '../lib/customStorage';
 
-const useCourseStore = create((set, get) => ({
+const useCourseStore = create(
+  persist(
+    (set, get) => ({
   semesters: [],
   courses: {},       // keyed by semester_id
   loading: false,
@@ -95,6 +99,12 @@ const useCourseStore = create((set, get) => ({
       return { success: false, error: err.message };
     }
   },
-}));
+}),
+    {
+      name: 'mentora-course-store',
+      storage: getSmartStorage(),
+    }
+  )
+);
 
 export default useCourseStore;

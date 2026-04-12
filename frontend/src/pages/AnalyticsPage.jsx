@@ -17,10 +17,39 @@ const AnalyticsPage = () => {
     fetchDashboard();
   }, [fetchDashboard]);
 
-  if (loading) {
+  if (loading && !dashboardData && weeklyData.length === 0) {
     return (
-      <div className="app-content flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="app-content animate-pulse">
+        <div className="mb-6 sm:mb-8">
+          <div className="h-8 w-48 bg-slate-200 rounded mb-2" />
+          <div className="h-4 w-64 bg-slate-200 rounded" />
+        </div>
+        
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="card p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100" />
+                <div className="h-4 w-16 bg-slate-200 rounded" />
+              </div>
+              <div className="h-8 w-24 bg-slate-200 rounded mb-2" />
+              <div className="h-2 w-full bg-slate-100 rounded-full mt-2" />
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="lg:col-span-2 card p-6">
+            <div className="h-5 w-32 bg-slate-200 rounded mb-2" />
+            <div className="h-4 w-48 bg-slate-100 rounded mb-8" />
+            <div className="h-48 bg-slate-100 rounded-lg" />
+          </div>
+          <div className="card p-6">
+            <div className="h-5 w-24 bg-slate-200 rounded mb-2" />
+            <div className="h-4 w-32 bg-slate-100 rounded mb-8" />
+            <div className="h-48 w-48 rounded-full bg-slate-100 mx-auto" />
+          </div>
+        </div>
       </div>
     );
   }

@@ -42,14 +42,7 @@ const CoursesPage = () => {
     return matchesSearch && matchesSemester;
   });
 
-  if (loading && semesters.length === 0) {
-    return (
-      <div className="app-content flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-
+  // Loading State - Handled in the render tree now
   return (
     <div className="app-content animate-fade-in">
       {/* Header */}
@@ -103,14 +96,35 @@ const CoursesPage = () => {
         </div>
       </div>
 
-      {/* Results count */}
-      <p className="text-sm text-slate-500 mb-4">
-        {filtered.length} course{filtered.length !== 1 && 's'}
-        {search && ` matching "${search}"`}
-      </p>
+      {/* Results count (hidden while totally empty loading) */}
+      {!loading && (
+        <p className="text-sm text-slate-500 mb-4">
+          {filtered.length} course{filtered.length !== 1 && 's'}
+          {search && ` matching "${search}"`}
+        </p>
+      )}
 
       {/* Course Grid/List */}
-      {filtered.length === 0 ? (
+      {loading && semesters.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="card overflow-hidden animate-pulse">
+              <div className="h-2 bg-slate-200" />
+              <div className="p-4 space-y-3">
+                <div className="h-4 w-16 bg-slate-200 rounded" />
+                <div className="h-5 w-3/4 bg-slate-200 rounded" />
+                <div className="flex justify-between">
+                  <div className="h-3 w-1/2 bg-slate-100 rounded" />
+                  <div className="h-3 w-8 bg-slate-100 rounded" />
+                </div>
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="h-3 w-20 bg-slate-100 rounded" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={BookOpen}
           title={search ? 'No courses match your search' : 'No courses yet'}

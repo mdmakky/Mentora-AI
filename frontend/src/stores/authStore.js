@@ -98,6 +98,12 @@ const useAuthStore = create((set, get) => ({
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('mentora-course-store');
+    localStorage.removeItem('mentora-document-store');
+    localStorage.removeItem('mentora-study-store');
+    sessionStorage.removeItem('mentora-course-store');
+    sessionStorage.removeItem('mentora-document-store');
+    sessionStorage.removeItem('mentora-study-store');
     set({ user: null, token: null, isAuthenticated: false });
   },
 

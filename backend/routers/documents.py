@@ -172,21 +172,8 @@ async def get_document_url(doc_id: str, user: dict = Depends(get_current_user)):
 
 
 @router.get("/{doc_id}/proxy")
-async def proxy_document(doc_id: str, token: Optional[str] = None, user: dict = None):
+async def proxy_document(doc_id: str, user: dict = Depends(get_current_user)):
     """Stream the document binary from Cloudinary with correct headers for in-browser PDF rendering."""
-    # Support token via query param for react-pdf (can't set Authorization headers)
-    if user is None:
-        if not token:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        from core.security import decode_token
-        payload = decode_token(token)
-        if not payload or payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = {"id": user_id}
-
     db = get_supabase_admin()
     result = db.table("documents").select("cloudinary_url, cloudinary_public_id, file_type, file_name").eq("id", doc_id).eq("user_id", user["id"]).single().execute()
     if not result.data:

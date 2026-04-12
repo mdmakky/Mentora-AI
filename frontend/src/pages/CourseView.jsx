@@ -77,10 +77,40 @@ const CourseView = () => {
     setFolderName('');
   };
 
-  if (loading) {
+  if (loading && !course) {
     return (
-      <div className="app-content flex items-center justify-center min-h-[60vh]">
-        <Spinner size="lg" />
+      <div className="app-content animate-pulse">
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-slate-200" />
+            <div>
+              <div className="w-16 h-3 bg-slate-200 rounded mb-2" />
+              <div className="w-48 h-6 bg-slate-200 rounded" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <div className="w-20 h-8 bg-slate-200 rounded" />
+            <div className="w-24 h-8 bg-slate-200 rounded" />
+          </div>
+        </div>
+        <div className="flex gap-6">
+          <div className="w-52 flex-shrink-0 space-y-2 hidden sm:block">
+            <div className="w-full h-8 bg-slate-100 rounded" />
+            <div className="w-full h-8 bg-slate-100 rounded" />
+            <div className="w-full h-8 bg-slate-100 rounded" />
+          </div>
+          <div className="flex-1 space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="w-24 h-4 bg-slate-100 rounded" />
+              <div className="w-16 h-8 bg-slate-100 rounded" />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-40 bg-slate-100 border border-slate-100 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
