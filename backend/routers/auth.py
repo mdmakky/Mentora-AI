@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from datetime import datetime, timezone, timedelta
 import secrets
 import uuid
+import logging
 from schemas.auth import (
     UserRegister, UserLogin, UserProfile, ForgotPasswordRequest,
     ResetPasswordRequest, VerifyEmailRequest, TokenResponse, RefreshTokenRequest,
@@ -74,8 +75,17 @@ async def register(data: UserRegister):
             code=verification_code,
             note="This code expires in 10 minutes.",
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logging.error("Registration email send failed for %s: %s", data.email, str(e))
+        try:
+            # Roll back the unverified account so user can re-register cleanly.
+            db.table("users").delete().eq("id", user_id).execute()
+        except Exception as rollback_error:
+            logging.error("Failed to rollback user %s after email send failure: %s", user_id, str(rollback_error))
+        raise HTTPException(
+            status_code=503,
+            detail="Could not send verification email right now. Please try registering again in a minute.",
+        )
 
     response = {
         "message": "Registration successful. Please check your email to verify your account.",

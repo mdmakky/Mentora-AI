@@ -26,6 +26,16 @@ def validate_password_strength(value: str) -> str:
     return value
 
 
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def normalize_email(value: str) -> str:
+    email = (value or "").strip().lower()
+    if not EMAIL_REGEX.match(email):
+        raise ValueError("Enter a valid email address")
+    return email
+
+
 class UserRegister(BaseModel):
     email: str = Field(..., description="User email address")
     password: str = Field(..., min_length=8, max_length=64, description="Strong password (8-64 chars)")
@@ -38,10 +48,20 @@ class UserRegister(BaseModel):
     def validate_password(cls, value: str) -> str:
         return validate_password_strength(value)
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class UserLogin(BaseModel):
     email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return normalize_email(value)
 
 
 class UserProfile(BaseModel):
@@ -55,6 +75,11 @@ class UserProfile(BaseModel):
 class ForgotPasswordRequest(BaseModel):
     email: str
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class ResetPasswordRequest(BaseModel):
     email: str
@@ -66,10 +91,20 @@ class ResetPasswordRequest(BaseModel):
     def validate_new_password(cls, value: str) -> str:
         return validate_password_strength(value)
 
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return normalize_email(value)
+
 
 class VerifyEmailRequest(BaseModel):
     email: str
     token: str
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return normalize_email(value)
 
 
 class TokenResponse(BaseModel):
