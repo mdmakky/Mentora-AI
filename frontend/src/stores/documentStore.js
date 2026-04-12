@@ -36,10 +36,19 @@ const useDocumentStore = create((set, get) => ({
 
   getDocumentUrl: async (docId) => {
     try {
-      // Use the backend proxy endpoint for reliable in-browser PDF rendering
+      // Fetch the document via standard API client using Authorization header, avoiding token in URL
       const token = localStorage.getItem('token');
       const base = import.meta.env.VITE_API_BASE || '/api/v1';
-      return `${base}/documents/${docId}/proxy?token=${encodeURIComponent(token)}`;
+      
+      const response = await fetch(`${base}/documents/${docId}/proxy`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch document proxy');
+      
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
     } catch {
       return null;
     }

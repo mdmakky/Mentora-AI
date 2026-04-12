@@ -8,6 +8,7 @@ import time
 from schemas.auth import (
     UserRegister, UserLogin, UserProfile, ForgotPasswordRequest,
     ResetPasswordRequest, VerifyEmailRequest, TokenResponse, RefreshTokenRequest,
+    ChangePasswordRequest,
 )
 from core.security import create_access_token, create_refresh_token, get_password_hash, verify_password, decode_token
 from core.database import get_supabase_admin
@@ -235,6 +236,28 @@ async def upload_user_avatar(
     db.table("users").update({"avatar_url": avatar_url}).eq("id", user["id"]).execute()
 
     return {"avatar_url": avatar_url}
+
+
+@router.put("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Change the authenticated user's password after verifying the current one."""
+    db = get_supabase_admin()
+
+    # Re-fetch the full user row to get the current password hash
+    user_result = db.table("users").select("password_hash").eq("id", user["id"]).single().execute()
+    if not user_result.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    stored_hash = user_result.data.get("password_hash")
+    if not stored_hash or not verify_password(data.current_password, stored_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    new_hash = get_password_hash(data.new_password)
+    db.table("users").update({"password_hash": new_hash}).eq("id", user["id"]).execute()
+    return {"message": "Password changed successfully"}
 
 
 @router.post("/forgot-password")

@@ -136,6 +136,16 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., description="The user's existing password")
+    new_password: str = Field(..., min_length=8, max_length=64, description="Strong new password")
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        return validate_password_strength(value)
+
+
 class UserResponse(BaseModel):
     id: str
     email: str

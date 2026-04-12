@@ -15,9 +15,9 @@ const AuthFrame = ({
 
       <div className="mx-auto w-full max-w-xl">
         <div className="mb-6 text-center">
-          <p className="inline-block rounded-full border border-emerald-700/20 bg-white/60 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800">
+          <Link to="/" className="inline-block rounded-full border border-emerald-700/20 bg-white/60 px-4 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-800 hover:bg-emerald-50 transition">
             Mentora Secure Access
-          </p>
+          </Link>
           <h1 className="mt-4 text-4xl font-bold leading-tight text-slate-900 sm:text-5xl">{title}</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm text-slate-700 sm:text-base">{subtitle}</p>
         </div>
@@ -26,13 +26,13 @@ const AuthFrame = ({
           {children}
 
           {(altText && altLink && altLinkLabel) && (
-            <p className="mt-6 text-center text-sm text-slate-600">
-              {altText}{' '}
-              <Link to={altLink} className="font-semibold text-emerald-700 transition hover:text-emerald-900">
-                {altLinkLabel}
-              </Link>
-            </p>
-          )}
+             <p className="mt-6 text-center text-sm text-slate-600">
+               {altText}{' '}
+               <Link to={altLink} className="font-semibold text-emerald-700 transition hover:text-emerald-900">
+                 {altLinkLabel}
+               </Link>
+             </p>
+           )}
         </div>
       </div>
     </div>

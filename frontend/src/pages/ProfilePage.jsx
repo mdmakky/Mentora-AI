@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { User, Mail, GraduationCap, Building2, Camera, Lock, CheckCircle, Loader2 } from 'lucide-react';
+import { User, Mail, GraduationCap, Building2, Camera, Lock, CheckCircle2, XCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import toast from 'react-hot-toast';
-import axios from 'axios';
-
-const API_BASE = import.meta.env.VITE_AUTH_API_BASE || '/api/v1/auth';
+import { apiClient } from '../lib/apiClient';
+import { getPasswordValidation } from '../utils/passwordValidation';
 
 const ProfilePage = () => {
   const { user, updateProfile, getProfile } = useAuthStore();
@@ -16,8 +15,14 @@ const ProfilePage = () => {
   });
   const [saving, setSaving] = useState(false);
 
-  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [pwSaving, setPwSaving] = useState(false);
+  
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const passwordValidation = getPasswordValidation(pwForm.newPassword);
 
   const [avatarLoading, setAvatarLoading] = useState(false);
 
@@ -36,25 +41,25 @@ const ProfilePage = () => {
 
   const handlePasswordChange = async (e) => {
     e.preventDefault();
-    if (pwForm.next !== pwForm.confirm) {
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-    if (pwForm.next.length < 8) {
-      toast.error('Password must be at least 8 characters');
+    if (!passwordValidation.isValid) {
+      toast.error('Please choose a stronger password that matches all security rules.');
       return;
     }
     setPwSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      await axios.put(`${API_BASE}/change-password`, {
-        current_password: pwForm.current,
-        new_password: pwForm.next,
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      await apiClient.put('/auth/change-password', {
+        current_password: pwForm.currentPassword,
+        new_password: pwForm.newPassword,
+      });
       toast.success('Password changed successfully!');
-      setPwForm({ current: '', next: '', confirm: '' });
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordTouched(false);
     } catch (err) {
-      toast.error(err?.response?.data?.detail || 'Failed to change password');
+      toast.error(err.message || 'Failed to change password');
     }
     setPwSaving(false);
   };
@@ -63,19 +68,17 @@ const ProfilePage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error('File size must be under 5MB'); return; }
 
     setAvatarLoading(true);
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`${API_BASE}/avatar`, formData, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
-      });
+      await apiClient.postForm('/auth/avatar', formData);
       await getProfile();
       toast.success('Avatar updated!');
     } catch (err) {
-      toast.error('Failed to upload avatar');
+      toast.error(err.message || 'Failed to upload avatar');
     }
     setAvatarLoading(false);
   };
@@ -118,7 +121,7 @@ const ProfilePage = () => {
             <div className={`mt-1.5 inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${
               user?.email_verified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
             }`}>
-              <CheckCircle size={11} />
+              {user?.email_verified ? <CheckCircle2 size={11} /> : <XCircle size={11} />}
               {user?.email_verified ? 'Verified' : 'Not verified'}
             </div>
           </div>
@@ -186,36 +189,84 @@ const ProfilePage = () => {
         <form onSubmit={handlePasswordChange} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Current Password</label>
-            <input
-              type="password"
-              value={pwForm.current}
-              onChange={(e) => setPwForm({ ...pwForm, current: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
-              placeholder="Your current password"
-              required
-            />
+            <div className="relative">
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                value={pwForm.currentPassword}
+                onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 pr-12 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
+                placeholder="Your current password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+              >
+                {showCurrentPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">New Password</label>
-            <input
-              type="password"
-              value={pwForm.next}
-              onChange={(e) => setPwForm({ ...pwForm, next: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
-              placeholder="Min. 8 characters"
-              required
-            />
+            <div className="relative">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                value={pwForm.newPassword}
+                onChange={(e) => { setPwForm({ ...pwForm, newPassword: e.target.value }); setPasswordTouched(true); }}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 pr-12 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
+                placeholder="Min. 8 characters"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+              >
+                {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {passwordTouched && (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-2">Security rules</p>
+                <ul className="space-y-1">
+                  {passwordValidation.rules.map((rule) => (
+                    <li key={rule.id} className={`flex items-center gap-2 text-xs ${rule.passed ? 'text-emerald-700' : 'text-slate-500'}`}>
+                      {rule.passed
+                        ? <CheckCircle2 size={12} className="flex-shrink-0 text-emerald-500" />
+                        : <XCircle size={12} className="flex-shrink-0 text-slate-300" />}
+                      {rule.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Confirm New Password</label>
-            <input
-              type="password"
-              value={pwForm.confirm}
-              onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })}
-              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
-              placeholder="Repeat new password"
-              required
-            />
+             <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={pwForm.confirmPassword}
+                onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
+                className={`w-full rounded-xl border px-4 py-2.5 pr-12 text-sm outline-none transition focus:ring-4 ${
+                   pwForm.confirmPassword && pwForm.newPassword !== pwForm.confirmPassword
+                     ? 'border-rose-300 focus:border-rose-400 focus:ring-rose-100'
+                     : pwForm.confirmPassword && pwForm.newPassword === pwForm.confirmPassword
+                     ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-100'
+                     : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-100'
+                }`}
+                placeholder="Repeat new password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+              >
+                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
           <div className="flex justify-end pt-1">
             <button

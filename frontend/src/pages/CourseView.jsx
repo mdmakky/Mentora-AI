@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Upload, FolderPlus, FileText, LayoutGrid, List,
-  Trash2, MoreVertical, Settings,
 } from 'lucide-react';
 import useCourseStore from '../stores/courseStore';
 import useDocumentStore from '../stores/documentStore';
@@ -64,7 +63,7 @@ const CourseView = () => {
   // Whenever documents change, start polling for any pending ones
   useEffect(() => {
     startPollingPending(documents);
-  }, [documents.length]);
+  }, [documents]);
 
   const handleFolderSelect = (folderId) => {
     setActiveFolder(folderId);

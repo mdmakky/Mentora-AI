@@ -11,7 +11,12 @@ export default function ContactPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
+    // Construct mailto link
+    const mailtoLink = `mailto:accounts@mentora-ai.app?subject=${encodeURIComponent(form.subject)}&body=${encodeURIComponent(form.message + '\n\nFrom: ' + form.name + ' <' + form.email + '>')}`;
+    window.location.href = mailtoLink;
+    
+    // Show success after short delay to feel like processing
+    await new Promise(r => setTimeout(r, 600));
     setSent(true);
     setLoading(false);
   };
@@ -19,7 +24,6 @@ export default function ContactPage() {
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: '#ffffff', color: '#0f172a', minHeight: '100vh' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         * { box-sizing: border-box; }
 
         .page-nav-link {
@@ -87,7 +91,13 @@ export default function ContactPage() {
       <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', borderBottom: '1px solid #f1f5f9' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 24px', height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }} onClick={() => navigate('/')} role="button" tabIndex={0}>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}
+            onClick={() => navigate('/')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/')}
+            role="button"
+            tabIndex={0}
+          >
             <div style={{ width: 30, height: 30, borderRadius: 8, background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>

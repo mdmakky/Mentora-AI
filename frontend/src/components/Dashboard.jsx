@@ -24,13 +24,21 @@ const Dashboard = () => {
     course_count: 0,
     current_streak: 0,
   });
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [statsError, setStatsError] = useState(false);
 
   useEffect(() => {
     fetchSemesters();
     // Fetch dashboard stats
+    setLoadingStats(true);
+    setStatsError(false);
     apiClient.get('/dashboard/stats').then((data) => {
       if (data) setStats(data);
-    }).catch(() => {});
+      setLoadingStats(false);
+    }).catch(() => {
+      setStatsError(true);
+      setLoadingStats(false);
+    });
   }, [fetchSemesters]);
 
   const handleCreate = async (e) => {
@@ -63,22 +71,35 @@ const Dashboard = () => {
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-        {[
-          { label: 'Courses', value: stats.course_count, icon: BookOpen, color: 'bg-emerald-50 text-emerald-600' },
-          { label: 'Documents', value: stats.document_count, icon: FileText, color: 'bg-blue-50 text-blue-600' },
-          { label: 'Chat Sessions', value: stats.chat_session_count, icon: MessagesSquare, color: 'bg-violet-50 text-violet-600' },
-          { label: 'Study Streak', value: `🔥 ${stats.current_streak} day${stats.current_streak !== 1 ? 's' : ''}`, icon: TrendingUp, color: 'bg-amber-50 text-amber-600' },
-        ].map((stat) => (
-          <div key={stat.label} className="card p-5 flex items-center gap-4">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.color}`}>
-              <stat.icon size={20} />
+        {loadingStats ? (
+          // Skeleton loaders
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="card p-5 flex items-center gap-4 animate-pulse">
+              <div className="w-11 h-11 rounded-xl bg-slate-100" />
+              <div className="space-y-2 flex-1">
+                <div className="h-6 w-12 bg-slate-100 rounded" />
+                <div className="h-3 w-20 bg-slate-100 rounded" />
+              </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
-              <p className="text-xs text-slate-500 font-medium">{stat.label}</p>
+          ))
+        ) : (
+          [
+            { label: 'Courses', value: statsError ? '—' : stats.course_count, icon: BookOpen, color: 'bg-emerald-50 text-emerald-600' },
+            { label: 'Documents', value: statsError ? '—' : stats.document_count, icon: FileText, color: 'bg-blue-50 text-blue-600' },
+            { label: 'Chat Sessions', value: statsError ? '—' : stats.chat_session_count, icon: MessagesSquare, color: 'bg-violet-50 text-violet-600' },
+            { label: 'Study Streak', value: statsError ? '—' : `🔥 ${stats.current_streak} day${stats.current_streak !== 1 ? 's' : ''}`, icon: TrendingUp, color: 'bg-amber-50 text-amber-600' },
+          ].map((stat) => (
+            <div key={stat.label} className="card p-5 flex items-center gap-4">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.color}`}>
+                <stat.icon size={20} />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold ${statsError ? 'text-slate-400' : 'text-slate-900'}`}>{stat.value}</p>
+                <p className="text-xs text-slate-500 font-medium">{stat.label}</p>
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Semesters header */}

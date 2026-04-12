@@ -16,17 +16,22 @@ const DocumentView = () => {
   const { currentDoc, getDocument, getDocumentUrl, clearCurrentDoc } = useDocumentStore();
 
   useEffect(() => {
+    let objectUrl = null;
     const load = async () => {
       setLoading(true);
       const doc = await getDocument(docId);
       if (doc) {
         const url = await getDocumentUrl(docId);
+        if (url && url.startsWith('blob:')) objectUrl = url;
         setPdfUrl(url || doc.cloudinary_url);
       }
       setLoading(false);
     };
     load();
-    return () => clearCurrentDoc();
+    return () => {
+      clearCurrentDoc();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [docId, getDocument, getDocumentUrl, clearCurrentDoc]);
 
   const handleCitationClick = (pageNumber) => {

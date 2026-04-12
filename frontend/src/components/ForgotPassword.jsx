@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import AuthFrame from './AuthFrame';
 
@@ -9,7 +9,6 @@ const ForgotPassword = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const forgotPassword = useAuthStore((state) => state.forgotPassword);
-  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -22,11 +21,10 @@ const ForgotPassword = () => {
 
     if (result.success) {
       setSuccess(result.message || 'If the email is registered, a reset code has been sent.');
-      navigate('/reset-password', {
-        state: {
-          email,
-        },
-      });
+      // Persist email so ResetPassword page survives refresh
+      sessionStorage.setItem('pendingResetEmail', email);
+      // Let user manually click a link or button if they want to navigate right away,
+      // or they can follow the link in their email.
     } else {
       setError(result.error);
     }
@@ -40,38 +38,46 @@ const ForgotPassword = () => {
       altLink="/login"
       altLinkLabel="Sign in"
     >
-      <form className="space-y-5" onSubmit={handleSubmit}>
-        <label className="block text-sm font-semibold text-slate-700" htmlFor="email">
-          Email Address
+      <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-2" htmlFor="email">
+            Email Address
+          </label>
           <input
             id="email"
             name="email"
             type="email"
             required
-            className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            autoComplete="email"
+            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
             placeholder="you@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => { setEmail(e.target.value); if(error) setError(''); }}
           />
-        </label>
+        </div>
 
-        {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
-        {success && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+        <div aria-live="polite" aria-atomic="true" className="space-y-2">
+          {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+        </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? 'Sending Code...' : 'Send Reset Code'}
-        </button>
-
-        <Link
-          to="/login"
-          className="block text-center text-sm font-medium text-emerald-700 transition hover:text-emerald-900"
-        >
-          Back to sign in
-        </Link>
+        {success ? (
+          <a
+            href="/reset-password"
+            className="flex items-center justify-center gap-2 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-700"
+          >
+            Enter Reset Code
+          </a>
+        ) : (
+          <button
+            type="submit"
+            disabled={loading || !email.trim()}
+            className="flex items-center justify-center gap-2 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading && <Loader2 size={15} className="animate-spin" />}
+            {loading ? 'Sending Code…' : 'Send Reset Code'}
+          </button>
+        )}
       </form>
     </AuthFrame>
   );
