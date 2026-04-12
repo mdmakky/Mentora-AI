@@ -27,6 +27,7 @@ def validate_password_strength(value: str) -> str:
 
 
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+OTP_REGEX = re.compile(r"^\d{6}$")
 
 
 def normalize_email(value: str) -> str:
@@ -34,6 +35,13 @@ def normalize_email(value: str) -> str:
     if not EMAIL_REGEX.match(email):
         raise ValueError("Enter a valid email address")
     return email
+
+
+def validate_otp_token(value: str) -> str:
+    token = (value or "").strip()
+    if not OTP_REGEX.match(token):
+        raise ValueError("Token must be a 6-digit code")
+    return token
 
 
 class UserRegister(BaseModel):
@@ -96,6 +104,11 @@ class ResetPasswordRequest(BaseModel):
     def validate_email(cls, value: str) -> str:
         return normalize_email(value)
 
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, value: str) -> str:
+        return validate_otp_token(value)
+
 
 class VerifyEmailRequest(BaseModel):
     email: str
@@ -105,6 +118,11 @@ class VerifyEmailRequest(BaseModel):
     @classmethod
     def validate_email(cls, value: str) -> str:
         return normalize_email(value)
+
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, value: str) -> str:
+        return validate_otp_token(value)
 
 
 class TokenResponse(BaseModel):

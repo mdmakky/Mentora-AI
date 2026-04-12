@@ -35,7 +35,7 @@ const ForgotPassword = () => {
   return (
     <AuthFrame
       title="Recover Your Password"
-      subtitle="This calls POST /auth/forgot-password and then routes you to reset with email + token."
+      subtitle="Request a reset code and use it to create a new password."
       altText="Remember your password?"
       altLink="/login"
       altLinkLabel="Sign in"

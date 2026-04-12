@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from datetime import datetime, timezone, timedelta
 import secrets
 import uuid
 import logging
+import threading
+import time
 from schemas.auth import (
     UserRegister, UserLogin, UserProfile, ForgotPasswordRequest,
     ResetPasswordRequest, VerifyEmailRequest, TokenResponse, RefreshTokenRequest,
@@ -16,6 +18,44 @@ from services.email_service import send_auth_email
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 settings = get_settings()
+
+_rate_lock = threading.Lock()
+_attempt_timestamps: dict[str, list[float]] = {}
+_last_action_timestamp: dict[str, float] = {}
+
+VERIFY_MAX_ATTEMPTS = 6
+VERIFY_WINDOW_SECONDS = 10 * 60
+RESEND_MAX_ATTEMPTS = 5
+RESEND_WINDOW_SECONDS = 60 * 60
+RESEND_COOLDOWN_SECONDS = 60
+
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_rate_limit(key: str, max_attempts: int, window_seconds: int) -> None:
+    now = time.time()
+    cutoff = now - window_seconds
+    with _rate_lock:
+        attempts = _attempt_timestamps.get(key, [])
+        attempts = [ts for ts in attempts if ts > cutoff]
+        if len(attempts) >= max_attempts:
+            raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+        attempts.append(now)
+        _attempt_timestamps[key] = attempts
+
+
+def _enforce_cooldown(key: str, cooldown_seconds: int) -> None:
+    now = time.time()
+    with _rate_lock:
+        last = _last_action_timestamp.get(key)
+        if last and now - last < cooldown_seconds:
+            raise HTTPException(status_code=429, detail="Please wait before requesting another code.")
+        _last_action_timestamp[key] = now
 
 
 def _generate_otp() -> str:
@@ -253,20 +293,25 @@ async def reset_password(data: ResetPasswordRequest):
 
 
 @router.post("/verify-email")
-async def verify_email(data: VerifyEmailRequest):
+async def verify_email(data: VerifyEmailRequest, request: Request):
     """Verify signup email using OTP code sent to email."""
+    ip = _client_ip(request)
+    _enforce_rate_limit(f"verify:{ip}:{data.email}", VERIFY_MAX_ATTEMPTS, VERIFY_WINDOW_SECONDS)
+
     admin_db = get_supabase_admin()
     try:
         user_result = admin_db.table("users").select("id, verification_code, verification_code_expires_at, email_verified").eq("email", data.email).single().execute()
         user = user_result.data
 
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=400, detail="Invalid or expired verification code")
 
         if user.get("email_verified"):
-            return {"message": "Email is already verified"}
+            return {"message": "Email verified successfully"}
 
-        if user.get("verification_code") != data.token or _is_expired(user.get("verification_code_expires_at")):
+        stored_code = str(user.get("verification_code") or "")
+        is_token_valid = bool(stored_code) and secrets.compare_digest(stored_code, data.token)
+        if not is_token_valid or _is_expired(user.get("verification_code_expires_at")):
             raise HTTPException(status_code=400, detail="Invalid or expired verification code")
 
         admin_db.table("users").update({
@@ -278,21 +323,26 @@ async def verify_email(data: VerifyEmailRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Verification failed: {str(e)}")
+        logging.error("Verification failure for %s: %s", data.email, str(e))
+        raise HTTPException(status_code=400, detail="Verification failed")
 
 
 @router.post("/resend-verification")
-async def resend_verification(data: ForgotPasswordRequest):
+async def resend_verification(data: ForgotPasswordRequest, request: Request):
     """Resend verification email."""
+    ip = _client_ip(request)
+    _enforce_rate_limit(f"resend:{ip}:{data.email}", RESEND_MAX_ATTEMPTS, RESEND_WINDOW_SECONDS)
+    _enforce_cooldown(f"resend-cooldown:{ip}:{data.email}", RESEND_COOLDOWN_SECONDS)
+
     db = get_supabase_admin()
     try:
         user_result = db.table("users").select("id, email_verified").eq("email", data.email).single().execute()
         user = user_result.data
         if not user:
-            return {"message": "If the email is registered, a verification code has been sent."}
+            return {"message": "If the account is eligible, a verification code has been sent."}
 
         if user.get("email_verified"):
-            return {"message": "Email is already verified"}
+            return {"message": "If the account is eligible, a verification code has been sent."}
 
         verification_code = _generate_otp()
         verification_expiry = _otp_expiry(10)
@@ -311,6 +361,7 @@ async def resend_verification(data: ForgotPasswordRequest):
             note="This code expires in 10 minutes.",
         )
 
-        return {"message": "Verification email sent"}
+        return {"message": "If the account is eligible, a verification code has been sent."}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to resend: {str(e)}")
+        logging.error("Resend verification failure for %s: %s", data.email, str(e))
+        raise HTTPException(status_code=503, detail="Unable to process request right now")

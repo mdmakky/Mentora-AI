@@ -56,7 +56,7 @@ const ResetPassword = () => {
   return (
     <AuthFrame
       title="Set New Password"
-      subtitle="This calls POST /auth/reset-password with { email, token, new_password }."
+      subtitle="Use your reset code and choose a strong new password."
       altText="Need a new token?"
       altLink="/forgot-password"
       altLinkLabel="Request again"

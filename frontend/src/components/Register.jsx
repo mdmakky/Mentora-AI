@@ -51,7 +51,7 @@ const Register = () => {
   return (
     <AuthFrame
       title="Create Your Mentora Account"
-      subtitle="Registration uses the backend route exactly. Email verification is required before login."
+      subtitle="Create your account, then verify your email before signing in."
       altText="Already registered?"
       altLink="/login"
       altLinkLabel="Go to sign in"

@@ -65,7 +65,7 @@ const VerifyEmail = () => {
   return (
     <AuthFrame
       title="Verify Email"
-      subtitle="This screen maps to POST /auth/verify-email using { email, token }."
+      subtitle="Enter the 6-digit code sent to your email to activate your account."
       altText="Need to register first?"
       altLink="/register"
       altLinkLabel="Back to register"
