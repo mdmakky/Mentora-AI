@@ -25,7 +25,7 @@ const AnalyticsPage = () => {
           <div className="h-4 w-64 bg-slate-200 rounded" />
         </div>
         
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 min-[430px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="card p-5">
               <div className="flex items-center gap-3 mb-3">
@@ -81,8 +81,8 @@ const AnalyticsPage = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="card p-5">
+      <div className="grid grid-cols-1 min-[430px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+        <div className="card p-4 sm:p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
               <Clock size={18} className="text-emerald-600" />
@@ -104,7 +104,7 @@ const AnalyticsPage = () => {
           <p className="text-[10px] text-slate-400 mt-1">Goal: {formatTime(goalMinutes)}</p>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
               <Flame size={18} className="text-amber-600" />
@@ -117,7 +117,7 @@ const AnalyticsPage = () => {
           <p className="text-[10px] text-slate-400 mt-1">Longest: {longestStreak} days</p>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
               <TrendingUp size={18} className="text-blue-600" />
@@ -130,7 +130,7 @@ const AnalyticsPage = () => {
           </p>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
               <Award size={18} className="text-violet-600" />
@@ -147,7 +147,7 @@ const AnalyticsPage = () => {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {/* Weekly Bar Chart */}
-        <div className="lg:col-span-2 card p-6">
+        <div className="lg:col-span-2 card p-4 sm:p-6">
           <h3 className="text-sm font-bold text-slate-800 mb-1">Weekly Study Time</h3>
           <p className="text-xs text-slate-400 mb-4">Minutes studied per day this week</p>
           {weeklyData.length > 0 ? (
@@ -190,7 +190,7 @@ const AnalyticsPage = () => {
         </div>
 
         {/* Course Breakdown Pie */}
-        <div className="card p-6">
+        <div className="card p-4 sm:p-6">
           <h3 className="text-sm font-bold text-slate-800 mb-1">By Course</h3>
           <p className="text-xs text-slate-400 mb-4">Total study time per course</p>
           {courseStats.length > 0 ? (
@@ -246,7 +246,7 @@ const AnalyticsPage = () => {
       </div>
 
       {/* Goal Streak Calendar */}
-      <div className="card p-6">
+      <div className="card p-4 sm:p-6">
         <h3 className="text-sm font-bold text-slate-800 mb-1">Daily Goals</h3>
         <p className="text-xs text-slate-400 mb-4">Whether you met your daily study goal each day this week</p>
         <div className="grid grid-cols-7 gap-1 sm:gap-3">

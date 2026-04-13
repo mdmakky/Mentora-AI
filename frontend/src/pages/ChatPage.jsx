@@ -17,6 +17,7 @@ const ChatPage = () => {
 
   const { semesters, courses, fetchSemesters, fetchCourses } = useCourseStore();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
@@ -61,6 +62,27 @@ const ChatPage = () => {
     }
   }, [text]);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const onChange = (event) => {
+      setIsMobile(event.matches);
+      if (event.matches) {
+        setSidebarOpen(false);
+      } else {
+        setSidebarOpen(true);
+      }
+    };
+
+    onChange(mq);
+    if (mq.addEventListener) {
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    }
+
+    mq.addListener(onChange);
+    return () => mq.removeListener(onChange);
+  }, []);
+
   const handleNewSession = async () => {
     if (!selectedCourse && allCourses.length > 0) {
       setSelectedCourse(allCourses[0].id);
@@ -96,11 +118,21 @@ const ChatPage = () => {
   const activeCourseInfo = allCourses.find((c) => c.id === activeSession?.course_id);
 
   return (
-    <div className="flex" style={{ height: 'calc(100vh - 64px)' }}>
+    <div className="flex relative" style={{ height: 'calc(100vh - 64px)' }}>
+      {isMobile && sidebarOpen && (
+        <button
+          className="absolute inset-0 z-20 bg-slate-900/30"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close chat sidebar"
+        />
+      )}
+
       {/* Sessions Sidebar */}
       <div
-        className={`bg-white border-r border-slate-200 flex flex-col transition-all duration-300 ${
-          sidebarOpen ? 'w-72' : 'w-0 overflow-hidden'
+        className={`border-r border-slate-200 flex flex-col transition-all duration-300 ${
+          isMobile
+            ? `absolute inset-y-0 left-0 z-30 w-[84%] max-w-xs bg-white shadow-xl ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`
+            : `bg-white ${sidebarOpen ? 'w-72' : 'w-0 overflow-hidden'}`
         }`}
       >
         {/* Sidebar Header */}
@@ -164,7 +196,7 @@ const ChatPage = () => {
                     e.stopPropagation();
                     deleteSession(s.id);
                   }}
-                  className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 ml-2 transition flex-shrink-0"
+                  className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 text-slate-300 hover:text-rose-500 ml-2 transition shrink-0"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -177,14 +209,14 @@ const ChatPage = () => {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-white">
         {/* Chat Header */}
-        <div className="h-14 border-b border-slate-200 flex items-center px-4 gap-3 flex-shrink-0">
+        <div className="h-14 border-b border-slate-200 flex items-center px-4 gap-3 shrink-0">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition flex-shrink-0"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition shrink-0"
           >
             {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </button>
-          <Sparkles size={16} className="text-violet-500 flex-shrink-0" />
+          <Sparkles size={16} className="text-violet-500 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">
               {activeSession?.title || 'Mentora AI Chat'}
@@ -199,10 +231,10 @@ const ChatPage = () => {
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-6">
           {!activeSessionId ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center py-20">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-5">
                 <Sparkles size={28} className="text-violet-500" />
               </div>
               <h2 className="text-xl font-bold text-slate-800 mb-2">Mentora AI Chat</h2>
@@ -259,11 +291,11 @@ const ChatPage = () => {
         </div>
 
         {/* Message Input */}
-        <div className="border-t border-slate-200 p-4 flex-shrink-0">
-          <div className="flex gap-3 items-end max-w-4xl mx-auto">
+        <div className="border-t border-slate-200 p-3 sm:p-4 shrink-0">
+          <div className="flex gap-2 sm:gap-3 items-end max-w-4xl mx-auto">
             <textarea
               ref={textareaRef}
-              className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm resize-none outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition bg-slate-50 focus:bg-white min-h-[48px] max-h-[140px]"
+              className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm resize-none outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition bg-slate-50 focus:bg-white min-h-12 max-h-35"
               placeholder="Ask about your course materials..."
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -274,7 +306,7 @@ const ChatPage = () => {
             <button
               onClick={handleSend}
               disabled={!text.trim() || sending}
-              className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+              className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
             >
               <Send size={18} />
             </button>

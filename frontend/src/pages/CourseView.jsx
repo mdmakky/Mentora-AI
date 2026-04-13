@@ -94,7 +94,7 @@ const CourseView = () => {
           </div>
         </div>
         <div className="flex gap-6">
-          <div className="w-52 flex-shrink-0 space-y-2 hidden sm:block">
+          <div className="w-52 shrink-0 space-y-2 hidden sm:block">
             <div className="w-full h-8 bg-slate-100 rounded" />
             <div className="w-full h-8 bg-slate-100 rounded" />
             <div className="w-full h-8 bg-slate-100 rounded" />
@@ -135,59 +135,57 @@ const CourseView = () => {
   return (
     <div className="app-content animate-fade-in">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('/dashboard')}
             className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
           >
             <ArrowLeft size={18} />
           </button>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span
-                className="inline-block w-3 h-3 rounded-full"
+                className="inline-block w-3 h-3 rounded-full shrink-0"
                 style={{ background: course.color }}
               />
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider truncate">
                 {course.course_code}
               </span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-900 mt-0.5">{course.course_name}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mt-0.5 leading-tight wrap-break-word">{course.course_name}</h1>
             {course.instructor && (
               <p className="text-sm text-slate-500 mt-0.5">Instructor: {course.instructor}</p>
             )}
           </div>
         </div>
+        </div>
 
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setShowNewFolder(true)}>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <Button size="sm" variant="outline" className="rounded-full" onClick={() => setShowNewFolder(true)}>
             <FolderPlus size={15} /> Folder
           </Button>
-          <Button size="sm" onClick={() => setShowUpload(true)}>
+          <Button size="sm" className="rounded-full" onClick={() => setShowUpload(true)}>
             <Upload size={15} /> Upload PDF
           </Button>
         </div>
       </div>
 
       {/* Content area */}
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Folder sidebar */}
         {folders.length > 0 && (
-          <div className="w-52 flex-shrink-0">
-            <FolderTree
-              folders={folders}
-              activeFolder={activeFolder}
-              onSelect={handleFolderSelect}
-            />
+          <div className="w-full lg:w-52 shrink-0 card p-2 sm:p-3">
+            <FolderTree folders={folders} activeFolder={activeFolder} onSelect={handleFolderSelect} />
           </div>
         )}
 
         {/* Documents */}
         <div className="flex-1 min-w-0">
           {/* Toolbar */}
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-sm text-slate-500">
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <p className="text-sm text-slate-500 min-w-0">
               {filteredDocs.length} document{filteredDocs.length !== 1 && 's'}
               {activeFolder && (
                 <button
@@ -198,16 +196,16 @@ const CourseView = () => {
                 </button>
               )}
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`pdf-toolbar-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                className={`pdf-toolbar-btn w-9 h-9 ${viewMode === 'grid' ? 'active' : ''}`}
               >
                 <LayoutGrid size={16} />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`pdf-toolbar-btn ${viewMode === 'list' ? 'active' : ''}`}
+                className={`pdf-toolbar-btn w-9 h-9 ${viewMode === 'list' ? 'active' : ''}`}
               >
                 <List size={16} />
               </button>
@@ -229,7 +227,7 @@ const CourseView = () => {
           ) : (
             <div className={
               viewMode === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
+                ? 'grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4'
                 : 'space-y-2'
             }>
               {filteredDocs.map((doc) => (

@@ -48,9 +48,9 @@ const FolderTree = ({ folders, activeFolder, onSelect, courseId }) => {
             className="flex items-center gap-2 flex-1 min-w-0 text-left"
           >
             {isActive ? (
-              <FolderOpen size={16} className="text-emerald-600 flex-shrink-0" />
+              <FolderOpen size={16} className="text-emerald-600 shrink-0" />
             ) : (
-              <Folder size={16} className="flex-shrink-0" />
+              <Folder size={16} className="shrink-0" />
             )}
 
             {isRenaming ? (
@@ -72,7 +72,7 @@ const FolderTree = ({ folders, activeFolder, onSelect, courseId }) => {
 
           {/* Rename save/cancel buttons */}
           {isRenaming ? (
-            <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
+            <div className="flex items-center gap-0.5 shrink-0 ml-1">
               <button
                 onClick={() => handleRenameSubmit(folder.id)}
                 className="w-5 h-5 flex items-center justify-center rounded text-emerald-600 hover:bg-emerald-50"
@@ -88,16 +88,16 @@ const FolderTree = ({ folders, activeFolder, onSelect, courseId }) => {
             </div>
           ) : (
             /* More menu */
-            <div className="relative flex-shrink-0">
+            <div className="relative shrink-0">
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(isMenuOpen ? null : folder.id); }}
-                className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
               >
                 <MoreVertical size={13} />
               </button>
 
               {isMenuOpen && (
-                <div className="absolute right-0 top-7 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-[120px]">
+                <div className="absolute right-0 top-7 z-20 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-30">
                   <button
                     onClick={() => handleRenameStart(folder)}
                     className="flex items-center gap-2 w-full px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
@@ -132,7 +132,7 @@ const FolderTree = ({ folders, activeFolder, onSelect, courseId }) => {
           onClick={() => onSelect(null)}
           className={`folder-tree-item w-full text-left ${!activeFolder ? 'active' : ''}`}
         >
-          <Folder size={16} className="flex-shrink-0" />
+          <Folder size={16} className="shrink-0" />
           <span className="truncate text-sm">All Documents</span>
         </button>
         {rootFolders.map(renderFolder)}

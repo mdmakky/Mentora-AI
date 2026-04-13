@@ -64,13 +64,13 @@ const CoursesPage = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex w-full sm:w-auto items-center gap-2">
+          <div className="relative flex-1 sm:flex-none">
             <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <select
               value={filterSemester}
               onChange={(e) => setFilterSemester(e.target.value)}
-              className="pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition bg-white appearance-none cursor-pointer"
+              className="w-full sm:w-auto pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition bg-white appearance-none cursor-pointer"
             >
               <option value="all">All Semesters</option>
               {semesters.map((s) => (
@@ -79,16 +79,16 @@ const CoursesPage = () => {
             </select>
           </div>
 
-          <div className="flex items-center gap-1 ml-1">
+          <div className="flex items-center gap-1 ml-1 shrink-0">
             <button
               onClick={() => setViewMode('grid')}
-              className={`pdf-toolbar-btn ${viewMode === 'grid' ? 'active' : ''}`}
+              className={`pdf-toolbar-btn w-9 h-9 ${viewMode === 'grid' ? 'active' : ''}`}
             >
               <LayoutGrid size={16} />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`pdf-toolbar-btn ${viewMode === 'list' ? 'active' : ''}`}
+              className={`pdf-toolbar-btn w-9 h-9 ${viewMode === 'list' ? 'active' : ''}`}
             >
               <List size={16} />
             </button>
@@ -162,7 +162,7 @@ const CoursesPage = () => {
                     {course.instructor || 'No instructor'}
                   </span>
                   {course.credit_hours && (
-                    <span className="flex-shrink-0 ml-2">{course.credit_hours} cr</span>
+                    <span className="shrink-0 ml-2">{course.credit_hours} cr</span>
                   )}
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-100">
@@ -181,11 +181,11 @@ const CoursesPage = () => {
             <div
               key={course.id}
               onClick={() => navigate(`/course/${course.id}`)}
-              className="card card-interactive flex items-center gap-4 px-4 py-3 group animate-slide-up"
+              className="card card-interactive flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 group animate-slide-up"
               style={{ animationDelay: `${i * 30}ms` }}
             >
               <span
-                className="w-3 h-3 rounded-full flex-shrink-0"
+                className="w-3 h-3 rounded-full shrink-0"
                 style={{ background: course.color }}
               />
               <div className="flex-1 min-w-0">
@@ -196,12 +196,13 @@ const CoursesPage = () => {
                     {course.course_name}
                   </span>
                 </div>
+                <p className="text-[11px] text-slate-400 mt-0.5 sm:hidden truncate">{course.semesterName}</p>
               </div>
-              <span className="text-xs text-slate-400 flex-shrink-0 hidden sm:block">
+              <span className="text-xs text-slate-400 shrink-0 hidden sm:block">
                 {course.semesterName}
               </span>
               {course.instructor && (
-                <span className="text-xs text-slate-500 flex-shrink-0 hidden md:block">
+                <span className="text-xs text-slate-500 shrink-0 hidden md:block">
                   {course.instructor}
                 </span>
               )}

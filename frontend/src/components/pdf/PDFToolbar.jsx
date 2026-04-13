@@ -7,6 +7,7 @@ const PDFToolbar = ({
   currentPage,
   numPages,
   scale,
+  isMobile,
   showThumbnails,
   onPageChange,
   onZoomIn,
@@ -23,10 +24,10 @@ const PDFToolbar = ({
     <div className="pdf-toolbar">
       {/* Left: page nav */}
       <div className="pdf-toolbar-group">
-        <button className="pdf-toolbar-btn" onClick={onToggleThumbnails} title="Toggle thumbnails">
+        <button className={`pdf-toolbar-btn ${isMobile ? 'hidden' : ''}`} onClick={onToggleThumbnails} title="Toggle thumbnails">
           <Columns size={16} />
         </button>
-        <div className="w-px h-5 bg-slate-200 mx-1" />
+        <div className={`w-px h-5 bg-slate-200 mx-1 ${isMobile ? 'hidden' : ''}`} />
         <button
           className="pdf-toolbar-btn"
           onClick={() => onPageChange(currentPage - 1)}
@@ -66,7 +67,7 @@ const PDFToolbar = ({
         <button className="pdf-toolbar-btn" onClick={onZoomIn} title="Zoom in">
           <ZoomIn size={16} />
         </button>
-        <button className="pdf-toolbar-btn" onClick={onFitPage} title="Fit page">
+        <button className={`pdf-toolbar-btn ${isMobile ? 'hidden' : ''}`} onClick={onFitPage} title="Fit page">
           <Maximize2 size={16} />
         </button>
       </div>

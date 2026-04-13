@@ -10,6 +10,7 @@ const DocumentView = () => {
   const { docId } = useParams();
   const navigate = useNavigate();
   const [chatOpen, setChatOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [targetPage, setTargetPage] = useState(null);
@@ -33,6 +34,25 @@ const DocumentView = () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [docId, getDocument, getDocumentUrl, clearCurrentDoc]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const onChange = (event) => {
+      setIsMobile(event.matches);
+      if (event.matches) {
+        setChatOpen(false);
+      }
+    };
+
+    onChange(mq);
+    if (mq.addEventListener) {
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    }
+
+    mq.addListener(onChange);
+    return () => mq.removeListener(onChange);
+  }, []);
 
   const handleCitationClick = (pageNumber) => {
     setTargetPage(pageNumber);
@@ -88,11 +108,11 @@ const DocumentView = () => {
       {/* PDF Viewer */}
       <div className="doc-view-pdf">
         {/* Mini toolbar for back + chat toggle */}
-        <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-200">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 bg-white border-b border-slate-200">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               onClick={() => navigate(-1)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition flex-shrink-0"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition shrink-0"
             >
               <ArrowLeft size={16} />
             </button>
@@ -100,21 +120,25 @@ const DocumentView = () => {
               {currentDoc.file_name}
             </p>
           </div>
-          <button
-            onClick={() => setChatOpen(!chatOpen)}
-            className="pdf-toolbar-btn flex-shrink-0"
-            title={chatOpen ? 'Hide chat' : 'Show chat'}
-          >
-            {chatOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
-          </button>
+          {isMobile ? (
+            <span className="text-[10px] font-medium text-slate-400 shrink-0">Chat off on mobile</span>
+          ) : (
+            <button
+              onClick={() => setChatOpen(!chatOpen)}
+              className="pdf-toolbar-btn shrink-0"
+              title={chatOpen ? 'Hide chat' : 'Show chat'}
+            >
+              {chatOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}
+            </button>
+          )}
         </div>
 
         <PDFViewer url={pdfUrl} targetPage={targetPage} />
       </div>
 
       {/* Chat Panel */}
-      <div className={`doc-view-chat ${!chatOpen ? 'collapsed' : ''}`}>
-        {chatOpen && (
+      <div className={`doc-view-chat ${!chatOpen || isMobile ? 'collapsed' : ''}`}>
+        {chatOpen && !isMobile && (
           <ChatPanel
             key={currentDoc.id}
             courseId={currentDoc.course_id}

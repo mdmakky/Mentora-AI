@@ -70,11 +70,11 @@ const Dashboard = () => {
       </div>
 
       {/* Quick stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+      <div className="grid grid-cols-1 min-[430px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         {loadingStats ? (
           // Skeleton loaders
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card p-5 flex items-center gap-4 animate-pulse">
+            <div key={i} className="card p-4 sm:p-5 flex items-center gap-4 animate-pulse min-w-0">
               <div className="w-11 h-11 rounded-xl bg-slate-100" />
               <div className="space-y-2 flex-1">
                 <div className="h-6 w-12 bg-slate-100 rounded" />
@@ -89,12 +89,12 @@ const Dashboard = () => {
             { label: 'Chat Sessions', value: statsError ? '—' : stats.chat_session_count, icon: MessagesSquare, color: 'bg-violet-50 text-violet-600' },
             { label: 'Study Streak', value: statsError ? '—' : `🔥 ${stats.current_streak} day${stats.current_streak !== 1 ? 's' : ''}`, icon: TrendingUp, color: 'bg-amber-50 text-amber-600' },
           ].map((stat) => (
-            <div key={stat.label} className="card p-5 flex items-center gap-4">
+            <div key={stat.label} className="card p-4 sm:p-5 flex items-center gap-4 min-w-0">
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.color}`}>
                 <stat.icon size={20} />
               </div>
-              <div>
-                <p className={`text-2xl font-bold ${statsError ? 'text-slate-400' : 'text-slate-900'}`}>{stat.value}</p>
+              <div className="min-w-0">
+                <p className={`text-lg sm:text-2xl leading-tight font-bold wrap-break-word ${statsError ? 'text-slate-400' : 'text-slate-900'}`}>{stat.value}</p>
                 <p className="text-xs text-slate-500 font-medium">{stat.label}</p>
               </div>
             </div>

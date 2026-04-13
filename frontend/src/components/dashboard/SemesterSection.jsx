@@ -46,17 +46,17 @@ const SemesterSection = ({ semester }) => {
       {/* Semester header */}
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50/50 transition text-left"
+        className="w-full flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-3 sm:px-5 py-4 hover:bg-white/35 transition text-left"
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
           {open ? (
-            <ChevronDown size={18} className="text-slate-400" />
+            <ChevronDown size={18} className="text-slate-400 shrink-0" />
           ) : (
-            <ChevronRight size={18} className="text-slate-400" />
+            <ChevronRight size={18} className="text-slate-400 shrink-0" />
           )}
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-slate-900">{semester.name}</h3>
+              <h3 className="font-bold text-slate-900 text-xl sm:text-lg leading-tight wrap-break-word">{semester.name}</h3>
               {semester.is_current && (
                 <span className="badge badge-success text-[10px]">
                   <Star size={10} className="mr-1" /> Current
@@ -69,9 +69,10 @@ const SemesterSection = ({ semester }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
-            <Plus size={14} /> Add Course
+        <div className="flex items-center gap-2 self-end sm:self-auto" onClick={(e) => e.stopPropagation()}>
+          <Button size="sm" variant="outline" className="rounded-full" onClick={() => setShowAdd(true)}>
+            <Plus size={14} />
+            <span className="hidden min-[390px]:inline">Add Course</span>
           </Button>
           <button
             onClick={() => deleteSemester(semester.id)}
@@ -84,13 +85,13 @@ const SemesterSection = ({ semester }) => {
 
       {/* Courses grid */}
       {open && (
-        <div className="px-5 pb-5 border-t border-slate-100">
+        <div className="px-3 sm:px-5 pb-5 border-t border-white/50">
           {semCourses.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-8">
               No courses yet. Add your first course to get started.
             </p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
+            <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 pt-4">
               {semCourses.map((course) => (
                 <CourseCard key={course.id} course={course} />
               ))}

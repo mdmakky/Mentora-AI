@@ -75,9 +75,9 @@
 }
 
 .doc-view-chat {
-  width: 400px;
-  min-width: 320px;
-  max-width: 500px;
+  width: clamp(460px, 34vw, 620px);
+  min-width: 420px;
+  max-width: 620px;
   display: flex;
   flex-direction: column;
   background: var(--surface-0);
@@ -291,16 +291,17 @@
 
 /* ===== Cards ===== */
 .card {
-  background: var(--surface-0);
-  border: 1px solid var(--surface-200);
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.65);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
   transition: all var(--transition-base);
 }
 
 .card:hover {
-  box-shadow: var(--shadow-md);
-  border-color: var(--surface-300);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+  border-color: rgba(255, 255, 255, 0.8);
 }
 
 .card-interactive {
@@ -476,26 +477,39 @@
   /* Document view stacks vertically */
   .doc-view {
     flex-direction: column;
-    height: auto;
+    height: calc(100vh - 64px);
     min-height: calc(100vh - 64px);
-    overflow: auto;
+    overflow: hidden;
   }
   .doc-view-pdf {
-    height: 55vh;
+    height: 100%;
     border-right: none;
-    border-bottom: 1px solid var(--surface-200);
+    border-bottom: none;
     flex-shrink: 0;
   }
   .doc-view-chat {
-    position: relative;
-    top: auto;
-    right: auto;
-    bottom: auto;
-    width: 100%;
-    min-width: unset;
-    max-width: unset;
-    box-shadow: none;
-    height: 50vh;
+    display: none;
+  }
+
+  .pdf-toolbar {
+    padding: 0 8px;
+    gap: 8px;
+    overflow-x: auto;
+  }
+
+  .pdf-toolbar-group {
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .pdf-page-input {
+    width: 42px;
+    padding: 3px;
+  }
+
+  .pdf-canvas-container {
+    padding: 8px;
+    background: #dbe2eb;
   }
   /* Hide page thumbnails */
   .page-thumbnails {

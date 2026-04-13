@@ -11,6 +11,8 @@ const PDFViewer = ({ url, targetPage }) => {
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.2);
+  const [isMobile, setIsMobile] = useState(false);
+  const [pageWidth, setPageWidth] = useState(0);
   const [showThumbnails, setShowThumbnails] = useState(false);
   const containerRef = useRef(null);
   const pageRefs = useRef({});
@@ -41,7 +43,38 @@ const PDFViewer = ({ url, targetPage }) => {
 
   const handleZoomIn = () => setScale((s) => Math.min(s + 0.2, 3));
   const handleZoomOut = () => setScale((s) => Math.max(s - 0.2, 0.5));
-  const handleFit = () => setScale(1.2);
+  const handleFit = () => setScale(isMobile ? 1 : 1.2);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (event) => {
+      setIsMobile(event.matches);
+      setScale(event.matches ? 1 : 1.2);
+      setShowThumbnails(false);
+    };
+
+    onChange(mq);
+    if (mq.addEventListener) {
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
+    }
+
+    mq.addListener(onChange);
+    return () => mq.removeListener(onChange);
+  }, []);
+
+  useEffect(() => {
+    const updateWidth = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const horizontalPadding = isMobile ? 16 : 32;
+      setPageWidth(Math.max(220, container.clientWidth - horizontalPadding));
+    };
+
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [isMobile]);
 
   // Track scroll position to update current page
   const handleScroll = useCallback(() => {
@@ -64,12 +97,15 @@ const PDFViewer = ({ url, targetPage }) => {
         currentPage={currentPage}
         numPages={numPages}
         scale={scale}
+        isMobile={isMobile}
         showThumbnails={showThumbnails}
         onPageChange={handlePageChange}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onFitPage={handleFit}
-        onToggleThumbnails={() => setShowThumbnails(!showThumbnails)}
+        onToggleThumbnails={() => {
+          if (!isMobile) setShowThumbnails(!showThumbnails);
+        }}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -128,7 +164,8 @@ const PDFViewer = ({ url, targetPage }) => {
                 >
                   <Page
                     pageNumber={i + 1}
-                    scale={scale}
+                    width={isMobile ? pageWidth : undefined}
+                    scale={isMobile ? scale : scale}
                     renderTextLayer={true}
                     renderAnnotationLayer={true}
                   />

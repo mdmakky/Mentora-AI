@@ -12,7 +12,7 @@ const CourseCard = ({ course }) => {
       {/* Color bar */}
       <div className="h-2" style={{ background: course.color }} />
 
-      <div className="p-4">
+      <div className="p-3.5 sm:p-4">
         {/* Course code badge */}
         <span
           className="inline-block text-xs font-bold px-2.5 py-1 rounded-lg mb-3"
@@ -30,11 +30,11 @@ const CourseCard = ({ course }) => {
         </h4>
 
         {/* Meta */}
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-500">
           {course.instructor && (
-            <span className="flex items-center gap-1">
+            <span className="flex items-center gap-1 min-w-0">
               <User size={12} />
-              {course.instructor}
+              <span className="truncate max-w-35">{course.instructor}</span>
             </span>
           )}
           {course.credit_hours && (

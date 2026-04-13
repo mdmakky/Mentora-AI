@@ -69,7 +69,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
         </span>
         <button
           onClick={handleDelete}
-          className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-md flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
+          className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 w-7 h-7 rounded-md flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
         >
           <Trash2 size={14} />
         </button>
@@ -86,7 +86,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
         }`}
       >
         {/* Preview area */}
-        <div className="h-32 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center relative">
+        <div className="h-32 bg-linear-to-br from-slate-50 to-slate-100 flex items-center justify-center relative">
           <span className="text-4xl">{typeIcons[doc.file_type] || '📄'}</span>
           <span className={`badge ${status.cls} absolute top-2 right-2 text-[10px]`}>
             {status.spin ? <Loader2 size={10} className="animate-spin mr-1" /> : <status.icon size={10} className="mr-1" />}
@@ -94,7 +94,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
           </span>
         </div>
 
-        <div className="p-3.5">
+        <div className="p-3 sm:p-3.5">
           <p className="text-sm font-semibold text-slate-900 truncate group-hover:text-emerald-700 transition mb-1">
             {doc.file_name}
           </p>
@@ -104,7 +104,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
             </p>
             <button
               onClick={handleDelete}
-              className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-rose-500 transition"
+              className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-rose-500 transition"
             >
               <Trash2 size={13} />
             </button>
