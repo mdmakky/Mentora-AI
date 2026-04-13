@@ -183,7 +183,7 @@ const AnalyticsPage = () => {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[260px] text-slate-400 text-sm">
+            <div className="flex items-center justify-center h-65 text-slate-400 text-sm">
               No study data this week yet. Start studying to see your chart!
             </div>
           )}
@@ -226,18 +226,18 @@ const AnalyticsPage = () => {
                   <div key={c.course_id} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2 min-w-0">
                       <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
                         style={{ background: c.color || PIE_COLORS[i % PIE_COLORS.length] }}
                       />
                       <span className="text-slate-700 truncate">{c.course_name}</span>
                     </div>
-                    <span className="text-slate-500 font-medium flex-shrink-0 ml-2">{formatTime(c.total_minutes)}</span>
+                    <span className="text-slate-500 font-medium shrink-0 ml-2">{formatTime(c.total_minutes)}</span>
                   </div>
                 ))}
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center h-[200px] text-slate-400 text-sm text-center">
+            <div className="flex flex-col items-center justify-center h-50 text-slate-400 text-sm text-center">
               <BookOpen size={24} className="mb-2 text-slate-200" />
               No course study data yet
             </div>

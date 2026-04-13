@@ -164,8 +164,8 @@ const ResetPassword = () => {
               {passwordValidation.rules.map((rule) => (
                 <li key={rule.id} className={`flex items-center gap-2 text-sm ${rule.passed ? 'text-emerald-700' : 'text-slate-500'}`}>
                    {rule.passed
-                     ? <CheckCircle2 size={14} className="flex-shrink-0 text-emerald-500" />
-                     : <XCircle size={14} className="flex-shrink-0 text-slate-300" />}
+                     ? <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                     : <XCircle size={14} className="shrink-0 text-slate-300" />}
                    {rule.label}
                 </li>
               ))}

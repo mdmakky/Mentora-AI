@@ -57,7 +57,7 @@ const Register = () => {
   return (
     <AuthFrame
       title="Create Your Mentora Account"
-      subtitle="Create your account, then verify your email before signing in."
+      subtitle="Create your workspace and verify your email to get started."
       altText="Already registered?"
       altLink="/login"
       altLinkLabel="Go to sign in"
@@ -75,7 +75,7 @@ const Register = () => {
               type="text"
               required
               autoComplete="name"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="w-full rounded-2xl border border-white/40 bg-white/20 px-4 py-3 text-slate-900 outline-none transition backdrop-blur-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               placeholder="Your full name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -91,7 +91,7 @@ const Register = () => {
               type="email"
               required
               autoComplete="email"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="w-full rounded-2xl border border-white/40 bg-white/20 px-4 py-3 text-slate-900 outline-none transition backdrop-blur-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -110,7 +110,7 @@ const Register = () => {
               name="university"
               type="text"
               autoComplete="organization"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="w-full rounded-2xl border border-white/40 bg-white/20 px-4 py-3 text-slate-900 outline-none transition backdrop-blur-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               placeholder="Your university"
               value={university}
               onChange={(e) => setUniversity(e.target.value)}
@@ -124,7 +124,7 @@ const Register = () => {
               id="department"
               name="department"
               type="text"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="w-full rounded-2xl border border-white/40 bg-white/20 px-4 py-3 text-slate-900 outline-none transition backdrop-blur-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               placeholder="CSE, EEE, …"
               value={department}
               onChange={(e) => setDepartment(e.target.value)}
@@ -146,7 +146,7 @@ const Register = () => {
               minLength={8}
               maxLength={64}
               autoComplete="new-password"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="w-full rounded-2xl border border-white/40 bg-white/20 px-4 py-3 pr-12 text-slate-900 outline-none transition backdrop-blur-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               placeholder="Create a strong password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setPasswordTouched(true); }}
@@ -164,7 +164,7 @@ const Register = () => {
 
         {/* Password strength rules — only shown after first keystroke */}
         {passwordTouched && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 mb-3">
               Password security rules
             </p>
@@ -172,8 +172,8 @@ const Register = () => {
               {passwordValidation.rules.map((rule) => (
                 <li key={rule.id} className={`flex items-center gap-2 text-sm ${rule.passed ? 'text-emerald-700' : 'text-slate-500'}`}>
                   {rule.passed
-                    ? <CheckCircle2 size={14} className="flex-shrink-0 text-emerald-500" />
-                    : <XCircle size={14} className="flex-shrink-0 text-slate-300" />}
+                    ? <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                    : <XCircle size={14} className="shrink-0 text-slate-300" />}
                   {rule.label}
                 </li>
               ))}
@@ -193,12 +193,12 @@ const Register = () => {
               type={showConfirm ? 'text' : 'password'}
               required
               autoComplete="new-password"
-              className={`w-full rounded-xl border bg-white px-4 py-3 pr-12 text-slate-900 outline-none transition focus:ring-4 ${
+              className={`w-full rounded-2xl border bg-white/20 px-4 py-3 pr-12 text-slate-900 outline-none transition backdrop-blur-lg focus:ring-4 ${
                 confirmPassword && !passwordsMatch
                   ? 'border-rose-300 focus:border-rose-400 focus:ring-rose-100'
                   : confirmPassword && passwordsMatch
                   ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-100'
-                  : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-100'
+                  : 'border-white/40 focus:border-emerald-500 focus:ring-emerald-100'
               }`}
               placeholder="Repeat your password"
               value={confirmPassword}
@@ -223,7 +223,7 @@ const Register = () => {
         {/* Error */}
         <div aria-live="polite" aria-atomic="true">
           {error && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {error}
             </div>
           )}
@@ -233,7 +233,7 @@ const Register = () => {
         <button
           type="submit"
           disabled={loading}
-          className="mt-2 flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-full bg-linear-to-br from-green-900 via-green-800 to-green-700 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading && <Loader2 size={15} className="animate-spin" />}
           {loading ? 'Creating Account…' : 'Create Account'}

@@ -36,7 +36,7 @@ const Login = () => {
   return (
     <AuthFrame
       title="Welcome Back"
-      subtitle="Log in using your verified Mentora account."
+      subtitle="Sign in to continue your AI-powered study workflow."
       altText="Need an account?"
       altLink="/register"
       altLinkLabel="Create one"
@@ -53,7 +53,7 @@ const Login = () => {
             type="email"
             required
             autoComplete="email"
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+            className="w-full rounded-2xl border border-white/40 bg-white/20 px-4 py-3 text-slate-900 outline-none transition backdrop-blur-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
             placeholder="you@example.com"
             value={email}
             onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
@@ -72,7 +72,7 @@ const Login = () => {
               type={showPassword ? 'text' : 'password'}
               required
               autoComplete="current-password"
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-12 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+              className="w-full rounded-2xl border border-white/40 bg-white/20 px-4 py-3 pr-12 text-slate-900 outline-none transition backdrop-blur-lg focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
               placeholder="Enter your password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
@@ -101,7 +101,7 @@ const Login = () => {
         {/* Error */}
         <div aria-live="polite" aria-atomic="true">
           {error && (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {error}
             </div>
           )}
@@ -111,7 +111,7 @@ const Login = () => {
         <button
           type="submit"
           disabled={loading}
-          className="flex items-center justify-center gap-2 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-linear-to-br from-green-900 via-green-800 to-green-700 px-4 py-3 text-sm font-semibold uppercase tracking-[0.08em] text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading && <Loader2 size={15} className="animate-spin" />}
           {loading ? 'Signing In…' : 'Sign In'}

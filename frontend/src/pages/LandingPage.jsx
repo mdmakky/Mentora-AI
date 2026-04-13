@@ -1,308 +1,243 @@
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, FileText, MessageSquare, TrendingUp, Lock, Zap, BookOpen, Check } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  ArrowRight,
+  Check,
+  Sparkles,
+  FileText,
+  MessageSquare,
+  TrendingUp,
+  ShieldCheck,
+  Menu,
+  X,
+} from 'lucide-react';
 
-const features = [
-  { icon: FileText,      label: 'Document Hub',      desc: 'Upload PDFs, lecture slides, and DOCX files. Organized by course and semester.',      color: '#10b981', bg: '#ecfdf5' },
-  { icon: MessageSquare, label: 'AI Chat',            desc: 'Ask questions in plain English. Get answers sourced directly from your own materials.', color: '#8b5cf6', bg: '#f5f3ff' },
-  { icon: TrendingUp,    label: 'Study Analytics',    desc: 'Track study hours and streaks. See which courses need more attention.',                 color: '#3b82f6', bg: '#eff6ff' },
-  { icon: Zap,           label: 'Auto Indexing',      desc: 'Every uploaded document is indexed instantly — ready to chat within seconds.',          color: '#f59e0b', bg: '#fffbeb' },
-  { icon: Lock,          label: 'Private & Secure',   desc: 'Your files are encrypted and private. Nothing is shared unless you choose.',            color: '#ec4899', bg: '#fdf2f8' },
-  { icon: BookOpen,      label: 'Course Structure',   desc: 'Organize by semester, course, and instructor — just like your actual university.',      color: '#06b6d4', bg: '#ecfeff' },
-];
+function LogoMark({ size = 32 }) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size * 0.28,
+        background: 'linear-gradient(145deg, #14532d 0%, #22c55e 55%, #86efac 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 4px 16px rgba(20, 83, 45, 0.35)',
+        flexShrink: 0,
+      }}
+    >
+      <svg
+        width={size * 0.48}
+        height={size * 0.48}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="white"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+        <path d="M6 12v5c3 3 9 3 12 0v-5" />
+      </svg>
+    </div>
+  );
+}
 
-const steps = [
-  { n: '1', title: 'Create a course',  desc: 'Add your university courses with semester and instructor details.' },
-  { n: '2', title: 'Upload materials', desc: 'Drop in PDFs or lecture slides. AI indexes them automatically.' },
-  { n: '3', title: 'Ask anything',     desc: 'Chat with AI using your own documents as the knowledge base.' },
+const featureCards = [
+  {
+    icon: FileText,
+    title: 'Document Intelligence',
+    desc: 'Upload PDFs, DOCX, and notes. Mentora maps concepts, summaries, and key citations in seconds.',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Contextual AI Chat',
+    desc: 'Ask any question and get responses tied directly to your own study materials, not generic web output.',
+  },
+  {
+    icon: TrendingUp,
+    title: 'Study Analytics',
+    desc: 'Track weak topics, revision frequency, and confidence scores to focus where it matters most.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Private By Design',
+    desc: 'Your academic content stays scoped to your account with secure storage and role-based access.',
+  },
 ];
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: '#ffffff', color: '#0f172a', minHeight: '100vh', overflowX: 'hidden' }}>
-      <style>{`
-        * { box-sizing: border-box; }
+    <div className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_8%_10%,rgba(190,242,100,0.35)_0%,rgba(236,253,245,0.55)_28%,transparent_50%),radial-gradient(circle_at_90%_9%,rgba(110,231,183,0.28)_0%,rgba(209,250,229,0.5)_26%,transparent_52%),radial-gradient(circle_at_82%_86%,rgba(253,230,138,0.3)_0%,rgba(254,243,199,0.45)_18%,transparent_40%),linear-gradient(180deg,#f7faf7_0%,#f5f7fb_100%)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(15,23,42,0.08)_0.8px,transparent_0.9px)] bg-size-[22px_22px]" />
 
-        /* Nav */
-        .lp-nav-link {
-          background: none; border: none; color: #64748b;
-          font-size: 14px; font-weight: 500; cursor: pointer;
-          padding: 7px 14px; border-radius: 8px;
-          transition: color .15s, background .15s; font-family: inherit;
-        }
-        .lp-nav-link:hover { color: #0f172a; background: #f1f5f9; }
+      <header className="sticky top-4 z-20 mx-auto mt-4 flex w-[min(1260px,calc(100%-20px))] items-center justify-between rounded-2xl border border-slate-900/10 bg-white/75 px-4 py-3 shadow-[0_14px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:px-5">
+        <Link to="/" className="inline-flex items-center gap-2.5" onClick={() => setMenuOpen(false)}>
+          <LogoMark />
+          <span className="font-['Sora'] text-base font-bold tracking-[-0.02em] text-slate-900">Mentora</span>
+        </Link>
 
-        /* Mobile */
-        @media (max-width: 640px) {
-          .nav-links-desktop { display: none !important; }
-          .nav-mobile { display: flex !important; }
-          .hero-section { padding: 64px 20px 60px !important; }
-          .feature-grid { grid-template-columns: 1fr !important; }
-          .steps-grid { grid-template-columns: 1fr !important; }
-          .section-pad { padding: 56px 20px !important; }
-          .cta-section { padding: 56px 20px !important; }
-          .footer-inner { flex-direction: column; align-items: flex-start !important; gap: 16px !important; }
-          .perk-row { gap: 10px !important; justify-content: flex-start !important; }
-        }
-        @media (max-width: 900px) {
-          .steps-grid { grid-template-columns: 1fr !important; }
-        }
+        <nav className="hidden items-center gap-6 md:flex">
+          <a href="#features" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">Features</a>
+          <Link to="/about" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">About Us</Link>
+          <Link to="/contact" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">Contact</Link>
+        </nav>
 
-        /* Buttons */
-        .btn-dark {
-          display: inline-flex; align-items: center; gap: 7px;
-          background: #0f172a; color: #fff; border: none;
-          font-size: 14px; font-weight: 700; padding: 12px 22px;
-          border-radius: 10px; cursor: pointer; font-family: inherit;
-          transition: background .15s, transform .15s;
-        }
-        .btn-dark:hover { background: #1e293b; transform: translateY(-1px); }
-
-        .btn-outline {
-          display: inline-flex; align-items: center; gap: 7px;
-          background: transparent; color: #475569;
-          border: 1px solid #e2e8f0;
-          font-size: 14px; font-weight: 600; padding: 12px 22px;
-          border-radius: 10px; cursor: pointer; font-family: inherit;
-          transition: border-color .15s, background .15s;
-        }
-        .btn-outline:hover { background: #f8fafc; border-color: #cbd5e1; color: #0f172a; }
-
-        .btn-green {
-          display: inline-flex; align-items: center; gap: 7px;
-          background: #10b981; color: #fff; border: none;
-          font-size: 14px; font-weight: 700; padding: 8px 18px;
-          border-radius: 9px; cursor: pointer; font-family: inherit;
-          transition: background .15s;
-        }
-        .btn-green:hover { background: #059669; }
-
-        /* Feature cards */
-        .feat-card {
-          background: #fff; border: 1px solid #e2e8f0;
-          border-radius: 14px; padding: 22px 24px;
-          transition: box-shadow .2s, transform .2s;
-        }
-        .feat-card:hover {
-          box-shadow: 0 8px 24px rgba(15,23,42,.07);
-          transform: translateY(-2px);
-        }
-
-        /* Step */
-        .step-card {
-          background: #f8fafc; border: 1px solid #e2e8f0;
-          border-radius: 14px; padding: 24px;
-        }
-
-        /* Footer link */
-        .ft-link {
-          background: none; border: none; color: #94a3b8;
-          font-size: 13px; cursor: pointer; padding: 0;
-          transition: color .15s; font-family: inherit;
-        }
-        .ft-link:hover { color: #475569; }
-
-        /* Mesh gradient for hero */
-        .hero-bg {
-          position: absolute; inset: 0; pointer-events: none; z-index: 0;
-          background:
-            radial-gradient(ellipse 60% 50% at 50% -10%, rgba(16,185,129,0.08) 0%, transparent 70%),
-            radial-gradient(ellipse 40% 40% at 80% 60%, rgba(139,92,246,0.05) 0%, transparent 60%),
-            radial-gradient(ellipse 40% 40% at 20% 70%, rgba(59,130,246,0.04) 0%, transparent 60%);
-        }
-
-        /* Subtle grid */
-        .hero-grid {
-          position: absolute; inset: 0; pointer-events: none; z-index: 0;
-          background-image:
-            linear-gradient(rgba(15,23,42,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(15,23,42,0.03) 1px, transparent 1px);
-          background-size: 48px 48px;
-          mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 70%, transparent 100%);
-          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 70%, transparent 100%);
-        }
-
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-        .cursor-em { display: inline-block; width: 3px; height: .85em; background: #10b981; vertical-align: middle; border-radius: 2px; margin-left: 2px; animation: blink 1s step-end infinite; }
-      `}</style>
-
-      {/* ── NAVBAR ── */}
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)',
-        borderBottom: '1px solid #f1f5f9',
-      }}>
-        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 24px', height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Logo */}
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}
-            onClick={() => navigate('/')}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/')}
-            role="button"
-            tabIndex={0}
+        <div className="hidden items-center gap-2 md:flex">
+          <button
+            onClick={() => navigate('/login')}
+            className="rounded-full border border-slate-900/15 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
           >
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
-              </svg>
-            </div>
-            <span style={{ fontWeight: 800, fontSize: 15.5, color: '#0f172a', letterSpacing: '-0.3px' }}>Mentora</span>
-          </div>
-          {/* Links */}
-          <div className="nav-links-desktop" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <button className="lp-nav-link" onClick={() => navigate('/about')}>About</button>
-            <button className="lp-nav-link" onClick={() => navigate('/contact')}>Contact</button>
-            <div style={{ width: 1, height: 18, background: '#e2e8f0', margin: '0 6px' }} />
-            <button className="btn-outline" style={{ padding: '7px 16px', fontSize: 13 }} onClick={() => navigate('/login')}>Sign in</button>
-            <button className="btn-green" style={{ marginLeft: 6 }} onClick={() => navigate('/register')}>
-              Get started <ArrowRight size={13} />
-            </button>
-          </div>
-          {/* Mobile: only show get started */}
-          <div style={{ display: 'none' }} className="nav-mobile">
-            <button className="btn-green" style={{ padding: '7px 14px', fontSize: 13 }} onClick={() => navigate('/register')}>
-              Get started <ArrowRight size={13} />
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── HERO ── */}
-      <section className="hero-section" style={{ position: 'relative', overflow: 'hidden', padding: '96px 24px 88px', textAlign: 'center' }}>
-        <div className="hero-bg" />
-        <div className="hero-grid" />
-
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto' }}>
-          {/* Badge */}
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0',
-            fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 100, marginBottom: 28,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-            AI Study Assistant · Powered by Gemini
-          </span>
-
-          {/* Headline */}
-          <h1 style={{
-            fontSize: 'clamp(38px, 6vw, 68px)', fontWeight: 900, lineHeight: 1.08,
-            letterSpacing: '-2.5px', margin: '0 0 20px', color: '#0f172a',
-          }}>
-            Your personal AI<br />
-            <span style={{ color: '#10b981' }}>study assistant</span>
-            <span className="cursor-em" />
-          </h1>
-
-          {/* Sub */}
-          <p style={{ fontSize: 17, color: '#64748b', lineHeight: 1.75, margin: '0 0 36px', maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
-            Upload lecture slides and PDFs. Chat with Gemini AI using your own materials.
-            Track your study progress — all in one place.
-          </p>
-
-          {/* CTAs */}
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button id="hero-start" className="btn-dark" style={{ padding: '13px 28px', fontSize: 15 }} onClick={() => navigate('/register')}>
-              Start for free <ArrowRight size={16} />
-            </button>
-            <button id="hero-signin" className="btn-outline" style={{ padding: '13px 28px', fontSize: 15 }} onClick={() => navigate('/login')}>
-              Sign in
-            </button>
-          </div>
-
-          {/* Perks */}
-          <div className="perk-row" style={{ display: 'flex', justifyContent: 'center', gap: 22, marginTop: 32, flexWrap: 'wrap' }}>
-            {['Free to get started', 'No credit card needed', 'PDF & DOCX support'].map(p => (
-              <div key={p} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#64748b' }}>
-                <Check size={13} color="#10b981" />
-                {p}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FEATURES ── */}
-      <section id="features" className="section-pad" style={{ background: '#f8fafc', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: '80px 24px' }}>
-        <div style={{ maxWidth: 1060, margin: '0 auto' }}>
-          <div style={{ marginBottom: 44 }}>
-            <p style={{ fontSize: 11.5, fontWeight: 700, color: '#10b981', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 10px' }}>What you get</p>
-            <h2 style={{ fontSize: 'clamp(22px, 3vw, 32px)', fontWeight: 800, margin: 0, letterSpacing: '-0.8px', color: '#0f172a' }}>
-              Everything you need to study better
-            </h2>
-          </div>
-          <div className="feature-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 14 }}>
-            {features.map(f => (
-              <div key={f.label} className="feat-card">
-                <div style={{ width: 38, height: 38, borderRadius: 9, background: f.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-                  <f.icon size={17} color={f.color} />
-                </div>
-                <h3 style={{ margin: '0 0 7px', fontSize: 14.5, fontWeight: 700, color: '#0f172a' }}>{f.label}</h3>
-                <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.7 }}>{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── HOW IT WORKS ── */}
-      <section className="section-pad" style={{ padding: '80px 24px' }}>
-        <div style={{ maxWidth: 820, margin: '0 auto' }}>
-          <div style={{ marginBottom: 44 }}>
-            <p style={{ fontSize: 11.5, fontWeight: 700, color: '#8b5cf6', letterSpacing: '0.1em', textTransform: 'uppercase', margin: '0 0 10px' }}>How it works</p>
-            <h2 style={{ fontSize: 'clamp(22px, 3vw, 32px)', fontWeight: 800, margin: 0, letterSpacing: '-0.8px', color: '#0f172a' }}>
-              Up and running in 3 steps
-            </h2>
-          </div>
-          <div className="steps-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-            {steps.map((s, i) => (
-              <div key={i} className="step-card">
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#10b981', letterSpacing: '0.1em', marginBottom: 12 }}>{s.n}</div>
-                <h3 style={{ margin: '0 0 8px', fontSize: 15, fontWeight: 700, color: '#0f172a' }}>{s.title}</h3>
-                <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.7 }}>{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA ── */}
-      <section className="cta-section" style={{ background: '#f8fafc', borderTop: '1px solid #f1f5f9', padding: '80px 24px' }}>
-        <div style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center' }}>
-          <h2 style={{ fontSize: 'clamp(22px, 3.5vw, 34px)', fontWeight: 800, margin: '0 0 12px', letterSpacing: '-0.8px', color: '#0f172a' }}>
-            Start studying smarter today
-          </h2>
-          <p style={{ color: '#64748b', fontSize: 15, margin: '0 0 30px', lineHeight: 1.65 }}>
-            Free to use. Upload your first document and start chatting with AI in minutes.
-          </p>
-          <button id="cta-register" className="btn-dark" style={{ padding: '13px 28px', fontSize: 15 }} onClick={() => navigate('/register')}>
-            Create free account <ArrowRight size={16} />
+            Sign in
+          </button>
+          <button
+            onClick={() => navigate('/register')}
+            className="inline-flex items-center gap-2 rounded-full bg-linear-to-br from-green-900 via-green-800 to-green-700 px-5 py-2.5 text-sm font-semibold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5"
+          >
+            Start for free <ArrowRight size={14} />
           </button>
         </div>
-      </section>
 
-      {/* ── FOOTER ── */}
-      <footer style={{ borderTop: '1px solid #f1f5f9', padding: '24px', background: '#fff' }}>
-        <div className="footer-inner" style={{ maxWidth: 1060, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate('/')} role="button">
-            <div style={{ width: 22, height: 22, borderRadius: 6, background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-              </svg>
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Mentora</span>
+        <button
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-900/15 bg-white/85 md:hidden"
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-label="Toggle menu"
+        >
+          {menuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+
+        {menuOpen && (
+          <div className="absolute left-2 right-2 top-16 rounded-2xl border border-slate-900/10 bg-white/95 p-3 shadow-xl md:hidden">
+            <a href="#features" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Features</a>
+            <Link to="/about" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>About Us</Link>
+            <Link to="/contact" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Contact</Link>
+            <Link to="/login" className="mt-1 block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Sign in</Link>
+            <Link to="/register" className="mt-1 block rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600" onClick={() => setMenuOpen(false)}>Start for free</Link>
           </div>
-          <div style={{ display: 'flex', gap: 20 }}>
-            {[
-              { l: 'About',   fn: () => navigate('/about') },
-              { l: 'Contact', fn: () => navigate('/contact') },
-              { l: 'Sign in', fn: () => navigate('/login') },
-            ].map(({ l, fn }) => (
-              <button key={l} className="ft-link" onClick={fn}>{l}</button>
+        )}
+      </header>
+
+      <main className="relative z-10 mx-auto w-[min(1160px,calc(100%-30px))]">
+        <section className="flex min-h-[calc(100vh-96px)] items-center py-10 sm:py-14">
+          <div className="mx-auto max-w-4xl text-center">
+            <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
+              <Sparkles size={12} /> Welcome to Mentora
+            </span>
+
+            <h1 className="font-['Sora'] text-4xl font-extrabold leading-[1.06] tracking-[-0.045em] text-slate-900 sm:text-6xl">
+              AI-Powered <span className="bg-linear-to-r from-green-900 via-lime-700 to-green-500 bg-clip-text text-transparent">Study</span> Assistant
+            </h1>
+
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
+              Built for students of Jashore University of Science and Technology, Mentora helps you study from your own materials with source-grounded AI answers and measurable progress.
+            </p>
+
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <button
+                onClick={() => navigate('/register')}
+                className="inline-flex items-center gap-2 rounded-full bg-linear-to-br from-green-900 via-green-800 to-green-700 px-7 py-3.5 text-sm font-bold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5"
+              >
+                Start for free <ArrowRight size={16} />
+              </button>
+              <button
+                onClick={() => navigate('/login')}
+                className="rounded-full border border-slate-900/15 bg-white/85 px-7 py-3.5 text-sm font-semibold text-slate-700 transition hover:bg-white"
+              >
+                Sign in
+              </button>
+            </div>
+
+            <div className="mt-6 flex flex-wrap justify-center gap-4 text-sm text-slate-500">
+              <span className="inline-flex items-center gap-1.5"><Check size={14} color="#16a34a" /> No credit card needed</span>
+              <span className="inline-flex items-center gap-1.5"><Check size={14} color="#16a34a" /> PDF and DOCX support</span>
+              <span className="inline-flex items-center gap-1.5"><Check size={14} color="#16a34a" /> AI answers with citations</span>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" className="py-10 sm:py-14">
+          <div className="text-center">
+            <h2 className="font-['Sora'] text-3xl font-bold tracking-[-0.03em] text-slate-900 sm:text-4xl">Everything Needed For Smarter Study Sessions</h2>
+            <p className="mx-auto mt-3 max-w-2xl text-slate-600 leading-8">
+              Mentora combines document understanding, context-aware chat, and actionable study metrics in one focused workspace.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {featureCards.map(({ icon: Icon, title, desc }) => (
+              <article key={title} className="rounded-2xl border border-white/40 bg-white/20 p-6 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur-lg transition hover:-translate-y-1 hover:shadow-[0_22px_36px_rgba(15,23,42,0.12)] hover:bg-white/25">
+                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-linear-to-br from-green-900 to-green-500 text-white shadow-lg">
+                  <Icon size={20} />
+                </div>
+                <h3 className="font-['Sora'] text-lg font-semibold text-slate-900">{title}</h3>
+                <p className="mt-2 text-sm leading-7 text-slate-600">{desc}</p>
+              </article>
             ))}
           </div>
-          <p style={{ fontSize: 12, color: '#cbd5e1', margin: 0 }}>© {new Date().getFullYear()} Mentora</p>
-        </div>
+        </section>
+
+        <section className="py-12 sm:py-16">
+          <div className="rounded-3xl border border-white/40 bg-white/20 p-8 shadow-[0_22px_42px_rgba(15,23,42,0.12)] backdrop-blur-lg">
+            <div className="text-center">
+              <h3 className="font-['Sora'] text-3xl font-bold tracking-[-0.03em] text-slate-900 sm:text-4xl">
+                Useful Workflows For Students
+              </h3>
+              <p className="mx-auto mt-3 max-w-3xl text-slate-600 leading-8">
+                Do not just upload files. Use Mentora to prepare for quizzes, build revision notes per course,
+                and get source-backed answers from your own class materials.
+              </p>
+            </div>
+
+            <div className="mt-8 grid gap-4 md:grid-cols-3">
+              <article className="rounded-2xl border border-white/40 bg-white/30 p-5 backdrop-blur-md">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">Before Class Test</p>
+                <h4 className="mt-2 font-['Sora'] text-lg font-semibold text-slate-900">Quick Quiz Prep</h4>
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  Upload lecture slides, ask for likely short questions, and get concise answers for fast review.
+                </p>
+              </article>
+
+              <article className="rounded-2xl border border-white/40 bg-white/30 p-5 backdrop-blur-md">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">During Semester</p>
+                <h4 className="mt-2 font-['Sora'] text-lg font-semibold text-slate-900">Course-Wise Revision</h4>
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  Organize by course and semester, then generate summaries and key concepts for each topic.
+                </p>
+              </article>
+
+              <article className="rounded-2xl border border-white/40 bg-white/30 p-5 backdrop-blur-md">
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">Final Exam Time</p>
+                <h4 className="mt-2 font-['Sora'] text-lg font-semibold text-slate-900">Source-Backed Answers</h4>
+                <p className="mt-2 text-sm leading-7 text-slate-600">
+                  Ask difficult questions and verify every answer using citations directly linked to your documents.
+                </p>
+              </article>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={() => navigate('/register')}
+                className="inline-flex items-center gap-2 rounded-full bg-linear-to-br from-green-900 via-green-800 to-green-700 px-6 py-3 text-sm font-semibold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5"
+              >
+                Start Using Mentora <ArrowRight size={15} />
+              </button>
+              <Link
+                to="/contact"
+                className="rounded-full border border-slate-900/15 bg-white/75 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
+              >
+                Suggest a Feature
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="relative z-10 mx-auto w-[min(1160px,calc(100%-30px))] py-10 text-center text-sm text-slate-500">
+        Mentora © {new Date().getFullYear()} · AI Study Platform
       </footer>
     </div>
   );

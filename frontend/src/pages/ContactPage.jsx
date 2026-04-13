@@ -1,225 +1,178 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Mail, Send, Loader2, CheckCircle2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Mail, Send, Loader2, CheckCircle2, Menu, X } from 'lucide-react';
 
 export default function ContactPage() {
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
-    // Construct mailto link
-    const mailtoLink = `mailto:accounts@mentora-ai.app?subject=${encodeURIComponent(form.subject)}&body=${encodeURIComponent(form.message + '\n\nFrom: ' + form.name + ' <' + form.email + '>')}`;
+
+    const mailtoLink = `mailto:accounts@mentora-ai.app?subject=${encodeURIComponent(form.subject)}&body=${encodeURIComponent(
+      `${form.message}\n\nFrom: ${form.name} <${form.email}>`
+    )}`;
+
     window.location.href = mailtoLink;
-    
-    // Show success after short delay to feel like processing
-    await new Promise(r => setTimeout(r, 600));
-    setSent(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
     setLoading(false);
+    setSent(true);
   };
 
   return (
-    <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: '#ffffff', color: '#0f172a', minHeight: '100vh' }}>
-      <style>{`
-        * { box-sizing: border-box; }
+    <div className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_8%_10%,rgba(190,242,100,0.35)_0%,rgba(236,253,245,0.55)_28%,transparent_50%),radial-gradient(circle_at_90%_9%,rgba(110,231,183,0.28)_0%,rgba(209,250,229,0.5)_26%,transparent_52%),linear-gradient(180deg,#f7faf7_0%,#f5f7fb_100%)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(15,23,42,0.08)_0.8px,transparent_0.9px)] bg-size-[22px_22px]" />
 
-        .page-nav-link {
-          background: none; border: none; color: #64748b; font-size: 14px;
-          font-weight: 500; cursor: pointer; padding: 7px 12px; border-radius: 8px;
-          transition: color .15s, background .15s; font-family: inherit;
-          display: inline-flex; align-items: center; gap: 6px;
-        }
-        .page-nav-link:hover { color: #0f172a; background: #f1f5f9; }
-
-        .btn-dark {
-          display: inline-flex; align-items: center; gap: 7px;
-          background: #0f172a; color: #fff; border: none;
-          font-size: 15px; font-weight: 700; padding: 13px 28px;
-          border-radius: 10px; cursor: pointer; font-family: inherit;
-          transition: background .15s, transform .15s;
-          width: 100%; justify-content: center;
-        }
-        .btn-dark:hover:not(:disabled) { background: #1e293b; transform: translateY(-1px); }
-        .btn-dark:disabled { opacity: 0.55; cursor: not-allowed; }
-
-        .contact-label {
-          display: block; font-size: 13px; font-weight: 600;
-          color: #374151; margin-bottom: 7px;
-        }
-        .contact-input {
-          width: 100%; background: #fff; border: 1px solid #e2e8f0;
-          border-radius: 10px; padding: 11px 14px; font-size: 14px;
-          color: #0f172a; outline: none;
-          transition: border-color .15s, box-shadow .15s; font-family: inherit;
-        }
-        .contact-input::placeholder { color: #cbd5e1; }
-        .contact-input:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.1); }
-
-        /* Hero bg */
-        .contact-hero-bg {
-          position: absolute; inset: 0; pointer-events: none; z-index: 0;
-          background:
-            radial-gradient(ellipse 60% 60% at 50% -5%, rgba(139,92,246,0.06) 0%, transparent 70%),
-            radial-gradient(ellipse 30% 40% at 10% 60%, rgba(16,185,129,0.04) 0%, transparent 60%);
-        }
-        .contact-hero-grid {
-          position: absolute; inset: 0; pointer-events: none; z-index: 0;
-          background-image:
-            linear-gradient(rgba(15,23,42,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(15,23,42,0.03) 1px, transparent 1px);
-          background-size: 48px 48px;
-          mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 60%, transparent 100%);
-          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 60%, transparent 100%);
-        }
-
-        /* Mobile */
-        @media (max-width: 640px) {
-          .nav-links-desktop { display: none !important; }
-          #contact-back-mobile { display: inline-flex !important; }
-          .contact-hero { padding: 56px 20px 52px !important; }
-          .contact-content { padding: 40px 20px 64px !important; }
-          .contact-two-col { grid-template-columns: 1fr !important; }
-        }
-
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-
-      {/* ── NAV ── */}
-      <nav style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', borderBottom: '1px solid #f1f5f9' }}>
-        <div style={{ maxWidth: 1080, margin: '0 auto', padding: '0 24px', height: 58, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Logo */}
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}
-            onClick={() => navigate('/')}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && navigate('/')}
-            role="button"
-            tabIndex={0}
-          >
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>
-              </svg>
-            </div>
-            <span style={{ fontWeight: 800, fontSize: 15.5, color: '#0f172a', letterSpacing: '-0.3px' }}>Mentora</span>
-          </div>
-          {/* Desktop right */}
-          <div className="nav-links-desktop" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button className="page-nav-link" onClick={() => navigate('/about')}>About</button>
-            <button className="page-nav-link" onClick={() => navigate('/login')}>Sign in</button>
-          </div>
-          {/* Mobile back */}
-          <button className="page-nav-link" style={{ display: 'none' }} id="contact-back-mobile" onClick={() => navigate(-1)}>
-            <ArrowLeft size={14} /> Back
-          </button>
-        </div>
-      </nav>
-
-      {/* ── HERO ── */}
-      <section className="contact-hero" style={{ position: 'relative', overflow: 'hidden', padding: '80px 24px 64px', textAlign: 'center' }}>
-        <div className="contact-hero-bg" />
-        <div className="contact-hero-grid" />
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 520, margin: '0 auto' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 100, marginBottom: 24 }}>
-            Get in touch
+      <header className="sticky top-4 z-20 mx-auto mt-4 flex w-[min(1260px,calc(100%-20px))] items-center justify-between rounded-2xl border border-slate-900/10 bg-white/75 px-4 py-3 shadow-[0_14px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:px-5">
+        <Link to="/" className="inline-flex items-center gap-2.5" onClick={() => setMenuOpen(false)}>
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-900 to-green-500 text-white">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+              <path d="M6 12v5c3 3 9 3 12 0v-5" />
+            </svg>
           </span>
-          <h1 style={{ fontSize: 'clamp(28px, 5vw, 48px)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-1.8px', margin: '0 0 16px', color: '#0f172a' }}>
-            We'd love to<br />
-            <span style={{ color: '#8b5cf6' }}>hear from you</span>
-          </h1>
-          <p style={{ fontSize: 16, color: '#64748b', lineHeight: 1.75, margin: 0 }}>
-            A question, feedback, or feature idea? Drop us a message and we'll get back to you.
-          </p>
+          <span className="font-['Sora'] text-base font-bold tracking-[-0.02em] text-slate-900">Mentora</span>
+        </Link>
+
+        <nav className="hidden items-center gap-6 md:flex">
+          <Link to="/" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">Home</Link>
+          <Link to="/about" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">About Us</Link>
+          <Link to="/contact" className="text-sm font-semibold text-emerald-700">Contact</Link>
+        </nav>
+
+        <div className="hidden items-center gap-2 md:flex">
+          <button onClick={() => navigate('/login')} className="rounded-full border border-slate-900/15 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white">Sign in</button>
+          <button onClick={() => navigate('/register')} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-green-900 via-green-800 to-green-700 px-5 py-2.5 text-sm font-semibold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5">Start for free <ArrowRight size={14} /></button>
         </div>
-      </section>
 
-      {/* ── FORM ── */}
-      <section className="contact-content" style={{ background: '#f8fafc', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', padding: '56px 24px 72px' }}>
-        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        <button className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-900/15 bg-white/85 md:hidden" onClick={() => setMenuOpen((v) => !v)} aria-label="Toggle menu">
+          {menuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
 
-          {/* Email chip */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '11px 16px', marginBottom: 28 }}>
-            <Mail size={14} color="#10b981" style={{ flexShrink: 0 }} />
-            <span style={{ fontSize: 13.5, color: '#475569' }}>
-              Or email us at{' '}
-              <a href="mailto:accounts@mentora-ai.app" style={{ color: '#059669', fontWeight: 600, textDecoration: 'none' }}>
+        {menuOpen && (
+          <div className="absolute left-2 right-2 top-16 rounded-2xl border border-slate-900/10 bg-white/95 p-3 shadow-xl md:hidden">
+            <Link to="/" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Home</Link>
+            <Link to="/about" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>About Us</Link>
+            <Link to="/contact" className="block rounded-lg px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Contact</Link>
+            <Link to="/login" className="mt-1 block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Sign in</Link>
+          </div>
+        )}
+      </header>
+
+      <main className="relative z-10 mx-auto w-[min(980px,calc(100%-30px))] py-14 sm:py-20">
+        <section className="text-center">
+          <span className="inline-flex items-center rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
+            Contact Mentora
+          </span>
+          <h1 className="mx-auto mt-5 max-w-3xl font-['Sora'] text-4xl font-extrabold leading-[1.08] tracking-[-0.04em] text-slate-900 sm:text-6xl">
+            We would love to hear from you
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
+            Ask a question, share feedback, or send a feature request. We usually reply quickly.
+          </p>
+        </section>
+
+        <section className="mx-auto mt-10 max-w-2xl">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-xl border border-white/40 bg-white/20 px-4 py-2 text-sm text-slate-600 backdrop-blur-lg">
+            <Mail size={14} className="text-emerald-700" />
+            <span>
+              Or email directly at{' '}
+              <a href="mailto:accounts@mentora-ai.app" className="font-semibold text-emerald-700 hover:text-emerald-900">
                 accounts@mentora-ai.app
               </a>
             </span>
           </div>
 
-          {/* Form card */}
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '32px', boxShadow: '0 2px 12px rgba(15,23,42,.04)' }}>
+          <div className="rounded-3xl border border-white/40 bg-white/20 p-6 shadow-[0_12px_28px_rgba(15,23,42,0.08)] backdrop-blur-lg sm:p-8">
             {sent ? (
-              <div style={{ textAlign: 'center', padding: '28px 0' }}>
-                <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
-                  <CheckCircle2 size={24} color="#10b981" />
+              <div className="py-6 text-center">
+                <div className="mx-auto mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                  <CheckCircle2 size={24} />
                 </div>
-                <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Message sent!</h3>
-                <p style={{ color: '#64748b', margin: '0 0 24px', fontSize: 14, lineHeight: 1.6 }}>
-                  Thanks for reaching out. We'll get back to you as soon as possible.
+                <h2 className="font-['Sora'] text-2xl font-semibold text-slate-900">Message sent</h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-slate-600">
+                  Thanks for reaching out. We will get back to you as soon as possible.
                 </p>
                 <button
-                  onClick={() => { setSent(false); setForm({ name: '', email: '', subject: '', message: '' }); }}
-                  style={{ background: 'none', border: '1px solid #e2e8f0', color: '#475569', fontSize: 13.5, fontWeight: 600, padding: '9px 20px', borderRadius: 9, cursor: 'pointer', transition: 'border-color .15s', fontFamily: 'inherit' }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = '#10b981'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                  onClick={() => {
+                    setSent(false);
+                    setForm({ name: '', email: '', subject: '', message: '' });
+                  }}
+                  className="mt-4 rounded-full border border-slate-900/15 bg-white px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Send another message
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                <div className="contact-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <div>
-                    <label className="contact-label" htmlFor="c-name">Name</label>
-                    <input id="c-name" className="contact-input" type="text" required placeholder="Your name"
-                      value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="contact-label" htmlFor="c-email">Email</label>
-                    <input id="c-email" className="contact-input" type="email" required placeholder="you@email.com"
-                      value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-                  </div>
+              <form onSubmit={handleSubmit} className="grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-semibold text-slate-700">
+                    Name
+                    <input
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      required
+                      value={form.name}
+                      onChange={(event) => setForm({ ...form, name: event.target.value })}
+                      placeholder="Your name"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-slate-700">
+                    Email
+                    <input
+                      type="email"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                      required
+                      value={form.email}
+                      onChange={(event) => setForm({ ...form, email: event.target.value })}
+                      placeholder="you@email.com"
+                    />
+                  </label>
                 </div>
-                <div>
-                  <label className="contact-label" htmlFor="c-subject">Subject</label>
-                  <input id="c-subject" className="contact-input" type="text" required placeholder="What is your message about?"
-                    value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })} />
-                </div>
-                <div>
-                  <label className="contact-label" htmlFor="c-message">Message</label>
-                  <textarea id="c-message" className="contact-input" rows={5} required
-                    placeholder="Tell us more…" style={{ resize: 'none' }}
-                    value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} />
-                </div>
-                <button type="submit" className="btn-dark" disabled={loading}>
-                  {loading
-                    ? <Loader2 size={15} style={{ animation: 'spin .8s linear infinite' }} />
-                    : <Send size={15} />}
-                  {loading ? 'Sending…' : 'Send Message'}
+
+                <label className="grid gap-2 text-sm font-semibold text-slate-700">
+                  Subject
+                  <input
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    required
+                    value={form.subject}
+                    onChange={(event) => setForm({ ...form, subject: event.target.value })}
+                    placeholder="What is this about?"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-semibold text-slate-700">
+                  Message
+                  <textarea
+                    rows={5}
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100"
+                    required
+                    value={form.message}
+                    onChange={(event) => setForm({ ...form, message: event.target.value })}
+                    placeholder="Tell us more..."
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="mt-2 inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-green-900 via-green-800 to-green-700 px-7 py-3.5 text-sm font-bold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                  {loading ? 'Sending...' : 'Send message'}
                 </button>
               </form>
             )}
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* ── FOOTER ── */}
-      <footer style={{ borderTop: '1px solid #f1f5f9', padding: '22px 24px', background: '#fff' }}>
-        <div style={{ maxWidth: 1060, margin: '0 auto', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate('/')} role="button">
-            <div style={{ width: 22, height: 22, borderRadius: 6, background: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-              </svg>
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Mentora</span>
-          </div>
-          <p style={{ fontSize: 12, color: '#cbd5e1', margin: 0 }}>© {new Date().getFullYear()} Mentora. All rights reserved.</p>
-        </div>
+      <footer className="relative z-10 mx-auto w-[min(980px,calc(100%-30px))] pb-10 text-center text-sm text-slate-500">
+        Mentora © {new Date().getFullYear()} · Built for focused learning
       </footer>
     </div>
   );
