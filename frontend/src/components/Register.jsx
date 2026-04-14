@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import AuthFrame from './AuthFrame';
+import GoogleAuthButton from './GoogleAuthButton';
 import { getPasswordValidation } from '../utils/passwordValidation';
 import SeoHead from './seo/SeoHead';
 
@@ -74,6 +75,8 @@ const Register = () => {
         altLinkLabel="Go to sign in"
       >
         <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+          <GoogleAuthButton mode="register" />
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="fullName">

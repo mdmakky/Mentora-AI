@@ -5,10 +5,13 @@ import uuid
 import logging
 import threading
 import time
+import httpx
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2 import id_token
 from schemas.auth import (
     UserRegister, UserLogin, UserProfile, ForgotPasswordRequest,
     ResetPasswordRequest, VerifyEmailRequest, TokenResponse, RefreshTokenRequest,
-    ChangePasswordRequest,
+    ChangePasswordRequest, GoogleAuthRequest, normalize_email,
 )
 from core.security import create_access_token, create_refresh_token, get_password_hash, verify_password, decode_token
 from core.database import get_supabase_admin
@@ -74,6 +77,31 @@ def _is_expired(expiry_iso: str) -> bool:
     if not expiry_iso:
         return True
     return datetime.now(timezone.utc) > datetime.fromisoformat(expiry_iso.replace("Z", "+00:00"))
+
+
+async def _fetch_google_userinfo(access_token: str) -> dict:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=401, detail="Invalid Google access token")
+
+    return response.json()
+
+
+def _build_token_response(user: dict) -> TokenResponse:
+    token_data = {"sub": user["id"], "email": user["email"]}
+    access_token = create_access_token(token_data, is_admin=user.get("is_admin", False))
+    refresh_token = create_refresh_token(token_data)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=user,
+    )
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -163,16 +191,84 @@ async def login(data: UserLogin):
         "last_login_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", user["id"]).execute()
 
-    # Create tokens
-    token_data = {"sub": user["id"], "email": user["email"]}
-    access_token = create_access_token(token_data, is_admin=user.get("is_admin", False))
-    refresh_token = create_refresh_token(token_data)
+    return _build_token_response(user)
 
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user=user,
-    )
+
+@router.post("/google-login", response_model=TokenResponse)
+async def google_login(data: GoogleAuthRequest):
+    """Login or create a user using a Google ID token."""
+    if not settings.GOOGLE_CLIENT_ID or settings.GOOGLE_CLIENT_ID.startswith("your-"):
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+
+    if data.access_token:
+        payload = await _fetch_google_userinfo(data.access_token)
+    else:
+        try:
+            payload = id_token.verify_oauth2_token(
+                data.credential or "",
+                GoogleRequest(),
+                settings.GOOGLE_CLIENT_ID,
+            )
+        except ValueError:
+            raise HTTPException(status_code=401, detail="Invalid Google sign-in token")
+
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account email is missing")
+    is_verified = payload.get("email_verified")
+    if is_verified is None:
+        is_verified = payload.get("verified_email")
+    if not bool(is_verified):
+        raise HTTPException(status_code=400, detail="Google account email is not verified")
+
+    normalized_email = normalize_email(email)
+    full_name = payload.get("name")
+    avatar_url = payload.get("picture")
+
+    db = get_supabase_admin()
+    user_result = db.table("users").select("*").eq("email", normalized_email).execute()
+    user = user_result.data[0] if user_result.data else None
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if user:
+        updates = {
+            "email_verified": True,
+            "last_login_at": now_iso,
+        }
+        if full_name and not user.get("full_name"):
+            updates["full_name"] = full_name
+        if avatar_url and not user.get("avatar_url"):
+            updates["avatar_url"] = avatar_url
+
+        db.table("users").update(updates).eq("id", user["id"]).execute()
+        user.update(updates)
+    else:
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": normalized_email,
+            "password_hash": None,
+            "verification_code": None,
+            "verification_code_expires_at": None,
+            "reset_code": None,
+            "reset_code_expires_at": None,
+            "full_name": full_name,
+            "university": None,
+            "department": None,
+            "current_semester": 1,
+            "avatar_url": avatar_url,
+            "study_goal_minutes": 120,
+            "warning_count": 0,
+            "is_upload_suspended": False,
+            "is_admin": False,
+            "email_verified": True,
+            "last_login_at": now_iso,
+        }
+
+        insert_result = db.table("users").insert(user).execute()
+        if insert_result.data:
+            user = insert_result.data[0]
+
+    return _build_token_response(user)
 
 
 @router.post("/logout")

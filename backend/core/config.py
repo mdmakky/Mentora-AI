@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Google AI
     GOOGLE_API_KEY: str = "your-gemini-api-key"
+    GOOGLE_CLIENT_ID: str = "your-google-client-id.apps.googleusercontent.com"
     GEMINI_CHAT_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
     GEMINI_TASK_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
     GEMINI_MAX_RETRIES_PER_MODEL: int = 2

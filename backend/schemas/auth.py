@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional
 from datetime import datetime
 
@@ -134,6 +134,17 @@ class TokenResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: Optional[str] = None
+    access_token: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_auth_payload(self):
+        if not self.credential and not self.access_token:
+            raise ValueError("Either credential or access_token is required")
+        return self
 
 
 class ChangePasswordRequest(BaseModel):

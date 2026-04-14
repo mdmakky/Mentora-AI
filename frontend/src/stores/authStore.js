@@ -27,16 +27,30 @@ const useAuthStore = create((set, get) => ({
   token: localStorage.getItem('token') || null,
   isAuthenticated: !!localStorage.getItem('token'),
 
+  setSession: ({ access_token, refresh_token, user }) => {
+    localStorage.setItem('token', access_token);
+    localStorage.setItem('refreshToken', refresh_token);
+    set({ user: sanitizeUser(user), token: access_token, isAuthenticated: true });
+    return { success: true, user: sanitizeUser(user) };
+  },
+
   login: async (email, password) => {
     try {
       const response = await axios.post(`${API_BASE}/login`, { email, password });
       const { access_token, refresh_token, user } = response.data;
-      localStorage.setItem('token', access_token);
-      localStorage.setItem('refreshToken', refresh_token);
-      set({ user: sanitizeUser(user), token: access_token, isAuthenticated: true });
-      return { success: true };
+      return get().setSession({ access_token, refresh_token, user });
     } catch (error) {
       return { success: false, error: getErrorMessage(error, 'Login failed') };
+    }
+  },
+
+  loginWithGoogle: async (credential) => {
+    try {
+      const response = await axios.post(`${API_BASE}/google-login`, { access_token: credential });
+      const { access_token, refresh_token, user } = response.data;
+      return get().setSession({ access_token, refresh_token, user });
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error, 'Google sign-in failed') };
     }
   },
 

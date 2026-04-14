@@ -13,6 +13,7 @@ const baseLinks = [
 const PublicNavbar = ({
   extraLinks = [],
   showAuthButtons = true,
+  compact = false,
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ const PublicNavbar = ({
   };
 
   return (
-    <header className="sticky top-4 z-20 mx-auto mt-4 flex w-[min(1260px,calc(100%-20px))] items-center justify-between rounded-2xl border border-slate-900/10 bg-white/75 px-4 py-3 shadow-[0_14px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:px-5">
+    <header className={`sticky z-20 mx-auto flex w-[min(1260px,calc(100%-20px))] items-center justify-between rounded-2xl border border-slate-900/10 bg-white/75 px-4 py-3 shadow-[0_14px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:px-5 ${compact ? 'top-2 mt-2' : 'top-4 mt-4'}`}>
       <BrandLogo onClick={() => setMenuOpen(false)} />
 
       <nav className="hidden items-center gap-6 md:flex">
