@@ -17,9 +17,9 @@ const AuthFrame = ({
 
       <div className="relative z-10 mx-auto w-full max-w-xl pt-4 sm:pt-6">
         <div className="mb-5 text-center sm:mb-6">
-          <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-700/20 bg-white/75 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-800 shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur-md">
+          {/* <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-700/20 bg-white/75 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-800 shadow-[0_10px_24px_rgba(15,23,42,0.06)] backdrop-blur-md">
             Mentora Secure Access
-          </div>
+          </div> */}
           <h1 className="font-['Sora'] text-4xl font-bold leading-tight tracking-[-0.04em] text-slate-900 sm:text-5xl">{title}</h1>
           <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-slate-700 sm:text-base">{subtitle}</p>
         </div>
