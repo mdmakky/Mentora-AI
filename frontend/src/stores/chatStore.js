@@ -1,6 +1,16 @@
 import { create } from 'zustand';
 import { apiClient } from '../lib/apiClient';
 
+const preserveDocumentPrefix = (existingTitle, nextTitle) => {
+  if (typeof existingTitle !== 'string' || !existingTitle.startsWith('DOC::')) {
+    return nextTitle;
+  }
+
+  const parts = existingTitle.split('::', 3);
+  if (parts.length < 3) return nextTitle;
+  return `DOC::${parts[1]}::${nextTitle}`;
+};
+
 const useChatStore = create((set, get) => ({
   sessions: [],
   activeSessionId: null,
@@ -108,7 +118,9 @@ const useChatStore = create((set, get) => ({
         const title = content.length > 50 ? content.slice(0, 50) + '...' : content;
         set((s) => ({
           sessions: s.sessions.map((ses) =>
-            ses.id === activeSessionId ? { ...ses, title } : ses
+            ses.id === activeSessionId
+              ? { ...ses, title: preserveDocumentPrefix(ses.title, title) }
+              : ses
           ),
         }));
       }

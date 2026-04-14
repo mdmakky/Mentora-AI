@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -8,41 +7,9 @@ import {
   MessageSquare,
   TrendingUp,
   ShieldCheck,
-  Menu,
-  X,
 } from 'lucide-react';
-
-function LogoMark({ size = 32 }) {
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size * 0.28,
-        background: 'linear-gradient(145deg, #14532d 0%, #22c55e 55%, #86efac 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        boxShadow: '0 4px 16px rgba(20, 83, 45, 0.35)',
-        flexShrink: 0,
-      }}
-    >
-      <svg
-        width={size * 0.48}
-        height={size * 0.48}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="white"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-        <path d="M6 12v5c3 3 9 3 12 0v-5" />
-      </svg>
-    </div>
-  );
-}
+import SeoHead from '../components/seo/SeoHead';
+import PublicNavbar from '../components/layout/PublicNavbar';
 
 const featureCards = [
   {
@@ -69,64 +36,37 @@ const featureCards = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
+
+  const structuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Mentora',
+    applicationCategory: 'EducationalApplication',
+    operatingSystem: 'Web',
+    url: 'https://mentora-ai.app/',
+    description: 'AI study assistant for university students with document chat, citation-based answers, and progress tracking.',
+  };
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_8%_10%,rgba(190,242,100,0.35)_0%,rgba(236,253,245,0.55)_28%,transparent_50%),radial-gradient(circle_at_90%_9%,rgba(110,231,183,0.28)_0%,rgba(209,250,229,0.5)_26%,transparent_52%),radial-gradient(circle_at_82%_86%,rgba(253,230,138,0.3)_0%,rgba(254,243,199,0.45)_18%,transparent_40%),linear-gradient(180deg,#f7faf7_0%,#f5f7fb_100%)]">
+      <SeoHead
+        title="AI Study Assistant for University Students"
+        description="Mentora helps students study faster with source-based AI chat over PDFs and lecture notes, plus analytics for exam preparation."
+        path="/"
+        keywords="AI study assistant, university learning platform, PDF chat AI, lecture notes chatbot, study analytics, exam preparation"
+        structuredData={structuredData}
+      />
+
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(15,23,42,0.08)_0.8px,transparent_0.9px)] bg-size-[22px_22px]" />
 
-      <header className="sticky top-4 z-20 mx-auto mt-4 flex w-[min(1260px,calc(100%-20px))] items-center justify-between rounded-2xl border border-slate-900/10 bg-white/75 px-4 py-3 shadow-[0_14px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:px-5">
-        <Link to="/" className="inline-flex items-center gap-2.5" onClick={() => setMenuOpen(false)}>
-          <LogoMark />
-          <span className="font-['Sora'] text-base font-bold tracking-[-0.02em] text-slate-900">Mentora</span>
-        </Link>
-
-        <nav className="hidden items-center gap-6 md:flex">
-          <a href="#features" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">Features</a>
-          <Link to="/about" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">About Us</Link>
-          <Link to="/contact" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">Contact</Link>
-        </nav>
-
-        <div className="hidden items-center gap-2 md:flex">
-          <button
-            onClick={() => navigate('/login')}
-            className="rounded-full border border-slate-900/15 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white"
-          >
-            Sign in
-          </button>
-          <button
-            onClick={() => navigate('/register')}
-            className="inline-flex items-center gap-2 rounded-full bg-linear-to-br from-green-900 via-green-800 to-green-700 px-5 py-2.5 text-sm font-semibold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5"
-          >
-            Start for free <ArrowRight size={14} />
-          </button>
-        </div>
-
-        <button
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-900/15 bg-white/85 md:hidden"
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-label="Toggle menu"
-        >
-          {menuOpen ? <X size={18} /> : <Menu size={18} />}
-        </button>
-
-        {menuOpen && (
-          <div className="absolute left-2 right-2 top-16 rounded-2xl border border-slate-900/10 bg-white/95 p-3 shadow-xl md:hidden">
-            <a href="#features" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Features</a>
-            <Link to="/about" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>About Us</Link>
-            <Link to="/contact" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Contact</Link>
-            <Link to="/login" className="mt-1 block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Sign in</Link>
-            <Link to="/register" className="mt-1 block rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-600" onClick={() => setMenuOpen(false)}>Start for free</Link>
-          </div>
-        )}
-      </header>
+      <PublicNavbar />
 
       <main className="relative z-10 mx-auto w-[min(1160px,calc(100%-30px))]">
         <section className="flex min-h-[calc(100vh-96px)] items-center py-10 sm:py-14">
           <div className="mx-auto max-w-4xl text-center">
-            <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
+            {/* <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
               <Sparkles size={12} /> Welcome to Mentora
-            </span>
+            </span> */}
 
             <h1 className="font-['Sora'] text-4xl font-extrabold leading-[1.06] tracking-[-0.045em] text-slate-900 sm:text-6xl">
               AI-Powered <span className="bg-linear-to-r from-green-900 via-lime-700 to-green-500 bg-clip-text text-transparent">Study</span> Assistant
@@ -230,6 +170,28 @@ export default function LandingPage() {
                 className="rounded-full border border-slate-900/15 bg-white/75 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-white"
               >
                 Suggest a Feature
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section className="py-10 sm:py-14">
+          <div className="rounded-3xl border border-white/40 bg-white/20 p-8 shadow-[0_22px_42px_rgba(15,23,42,0.12)] backdrop-blur-lg">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">SEO Resources</p>
+                <h3 className="mt-2 font-['Sora'] text-2xl font-bold tracking-[-0.03em] text-slate-900 sm:text-3xl">
+                  Read Student-Focused Study Guides
+                </h3>
+                <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">
+                  Find practical guides on exam preparation, lecture-slide revision, and AI-supported study workflows designed for university students.
+                </p>
+              </div>
+              <Link
+                to="/guides"
+                className="inline-flex items-center gap-2 self-start rounded-full bg-linear-to-br from-green-900 via-green-800 to-green-700 px-5 py-2.5 text-sm font-semibold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5"
+              >
+                Explore all guides <ArrowRight size={14} />
               </Link>
             </div>
           </div>

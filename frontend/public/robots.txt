@@ -5,10 +5,17 @@ Allow: /contact
 
 Disallow: /dashboard
 Disallow: /courses
+Disallow: /course/
+Disallow: /document/
 Disallow: /chat
 Disallow: /analytics
 Disallow: /profile
 Disallow: /admin
+Disallow: /login
+Disallow: /register
+Disallow: /verify-email
+Disallow: /forgot-password
+Disallow: /reset-password
 Disallow: /api/
 
 Sitemap: https://mentora-ai.app/sitemap.xml

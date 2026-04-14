@@ -9,6 +9,16 @@ from services.gemini_service import generate_chat_response
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
+def _build_auto_title(existing_title: str, user_content: str) -> str:
+    """Preserve document prefix format when auto-generating first-message titles."""
+    raw_title = user_content[:50] + ("..." if len(user_content) > 50 else "")
+    if isinstance(existing_title, str) and existing_title.startswith("DOC::"):
+        parts = existing_title.split("::", 2)
+        if len(parts) == 3:
+            return f"DOC::{parts[1]}::{raw_title}"
+    return raw_title
+
+
 @router.post("/sessions", response_model=ChatSessionResponse, status_code=201)
 async def create_session(data: ChatSessionCreate, user: dict = Depends(get_current_user)):
     """Create a new chat session."""
@@ -138,7 +148,7 @@ async def send_message(
 
     # Auto-rename first message
     if len(conversation_history) <= 1:
-        title = data.content[:50] + ("..." if len(data.content) > 50 else "")
+        title = _build_auto_title(session.data.get("title", ""), data.content)
         db.table("chat_sessions").update({"title": title}).eq("id", session_id).execute()
 
     return ai_msg.data[0]

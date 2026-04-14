@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Target, Zap, ShieldCheck, Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { Target, Zap, ShieldCheck } from 'lucide-react';
+import SeoHead from '../components/seo/SeoHead';
+import PublicNavbar from '../components/layout/PublicNavbar';
 
 const sections = [
   {
@@ -26,54 +27,33 @@ const sections = [
 ];
 
 export default function AboutPage() {
-  const navigate = useNavigate();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const structuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'AboutPage',
+    name: 'About Mentora',
+    url: 'https://mentora-ai.app/about',
+    description: 'Learn about Mentora, an AI-powered study assistant for university students.',
+  };
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_8%_10%,rgba(190,242,100,0.35)_0%,rgba(236,253,245,0.55)_28%,transparent_50%),radial-gradient(circle_at_90%_9%,rgba(110,231,183,0.28)_0%,rgba(209,250,229,0.5)_26%,transparent_52%),linear-gradient(180deg,#f7faf7_0%,#f5f7fb_100%)]">
+      <SeoHead
+        title="About Mentora"
+        description="Mentora is built to help students learn from their own notes and lecture documents with reliable, source-grounded AI assistance."
+        path="/about"
+        keywords="about Mentora, AI education platform, student productivity app"
+        structuredData={structuredData}
+      />
+
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(15,23,42,0.08)_0.8px,transparent_0.9px)] bg-size-[22px_22px]" />
 
-      <header className="sticky top-4 z-20 mx-auto mt-4 flex w-[min(1260px,calc(100%-20px))] items-center justify-between rounded-2xl border border-slate-900/10 bg-white/75 px-4 py-3 shadow-[0_14px_38px_rgba(15,23,42,0.08)] backdrop-blur-xl sm:px-5">
-        <Link to="/" className="inline-flex items-center gap-2.5" onClick={() => setMenuOpen(false)}>
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-900 to-green-500 text-white">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-              <path d="M6 12v5c3 3 9 3 12 0v-5" />
-            </svg>
-          </span>
-          <span className="font-['Sora'] text-base font-bold tracking-[-0.02em] text-slate-900">Mentora</span>
-        </Link>
-
-        <nav className="hidden items-center gap-6 md:flex">
-          <Link to="/" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">Home</Link>
-          <Link to="/about" className="text-sm font-semibold text-emerald-700">About Us</Link>
-          <Link to="/contact" className="text-sm font-semibold text-slate-800 transition hover:text-emerald-700">Contact</Link>
-        </nav>
-
-        <div className="hidden items-center gap-2 md:flex">
-          <button onClick={() => navigate('/login')} className="rounded-full border border-slate-900/15 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white">Sign in</button>
-          <button onClick={() => navigate('/register')} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-green-900 via-green-800 to-green-700 px-5 py-2.5 text-sm font-semibold text-emerald-50 shadow-[0_8px_22px_rgba(21,128,61,0.28)] transition hover:-translate-y-0.5">Start for free <ArrowRight size={14} /></button>
-        </div>
-
-        <button className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-900/15 bg-white/85 md:hidden" onClick={() => setMenuOpen((v) => !v)} aria-label="Toggle menu">
-          {menuOpen ? <X size={18} /> : <Menu size={18} />}
-        </button>
-
-        {menuOpen && (
-          <div className="absolute left-2 right-2 top-16 rounded-2xl border border-slate-900/10 bg-white/95 p-3 shadow-xl md:hidden">
-            <Link to="/" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Home</Link>
-            <Link to="/about" className="block rounded-lg px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>About Us</Link>
-            <Link to="/contact" className="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Contact</Link>
-            <Link to="/login" className="mt-1 block rounded-lg px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-emerald-50" onClick={() => setMenuOpen(false)}>Sign in</Link>
-          </div>
-        )}
-      </header>
+      <PublicNavbar />
 
       <main className="relative z-10 mx-auto w-[min(1040px,calc(100%-30px))] py-14 sm:py-20">
         <section className="text-center">
-          <span className="inline-flex items-center rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
+          {/* <span className="inline-flex items-center rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
             About Mentora
-          </span>
+          </span> */}
           <h1 className="mx-auto mt-5 max-w-3xl font-['Sora'] text-4xl font-extrabold leading-[1.08] tracking-[-0.04em] text-slate-900 sm:text-6xl">
             Built for students who want better tools
           </h1>

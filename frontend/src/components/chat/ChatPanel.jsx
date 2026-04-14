@@ -5,6 +5,25 @@ import ChatMessage from './ChatMessage';
 import MessageComposer from './MessageComposer';
 import Spinner from '../ui/Spinner';
 
+const CHAT_SESSION_KEY = 'mentora-chat-session-map';
+
+const readSessionMap = () => {
+  try {
+    const raw = localStorage.getItem(CHAT_SESSION_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeSessionMap = (nextMap) => {
+  try {
+    localStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(nextMap));
+  } catch {
+    // Ignore storage errors to keep chat functional.
+  }
+};
+
 const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
   const {
     sessions, activeSessionId, messages, sending,
@@ -37,6 +56,38 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
     setShowSessions(false);
   }, [documentId, clearMessages]);
 
+  useEffect(() => {
+    if (!documentId || loadingSessions) return;
+
+    const activeInCurrentDocument = documentSessions.some((s) => s.id === activeSessionId);
+    if (activeInCurrentDocument) return;
+
+    const sessionMap = readSessionMap();
+    const savedSessionId = sessionMap[documentId];
+    const preferredSession = savedSessionId
+      ? documentSessions.find((s) => s.id === savedSessionId)
+      : null;
+    const fallbackSession = documentSessions[0];
+
+    if (preferredSession?.id) {
+      selectSession(preferredSession.id);
+      return;
+    }
+
+    if (fallbackSession?.id) {
+      selectSession(fallbackSession.id);
+    }
+  }, [documentId, documentSessions, activeSessionId, loadingSessions, selectSession]);
+
+  useEffect(() => {
+    if (!documentId || !activeSessionId) return;
+    if (!documentSessions.some((s) => s.id === activeSessionId)) return;
+
+    const sessionMap = readSessionMap();
+    if (sessionMap[documentId] === activeSessionId) return;
+    writeSessionMap({ ...sessionMap, [documentId]: activeSessionId });
+  }, [documentId, activeSessionId, documentSessions]);
+
   // Auto-scroll on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -51,7 +102,9 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
   const handleSend = async (content) => {
     if (!activeSessionId) {
       // Auto-create session on first message
-      const result = await createSession(courseId, content.slice(0, 50));
+      const baseTitle = content.slice(0, 50);
+      const title = documentId ? `${sessionPrefix}${baseTitle}` : baseTitle;
+      const result = await createSession(courseId, title);
       if (!result.success) return;
     }
     await sendMessage(content, documentId ? [documentId] : null);
@@ -68,11 +121,11 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
             onClick={() => setShowSessions(!showSessions)}
             className="flex items-center gap-2 text-sm font-semibold text-slate-800 hover:text-emerald-700 transition min-w-0"
           >
-            <Sparkles size={16} className="text-violet-500 flex-shrink-0" />
+            <Sparkles size={16} className="text-violet-500 shrink-0" />
             <span className="truncate">
               {formatSessionTitle(activeSession?.title) || 'AI Chat'}
             </span>
-            <ChevronDown size={14} className="text-slate-400 flex-shrink-0" />
+            <ChevronDown size={14} className="text-slate-400 shrink-0" />
           </button>
 
           {/* Session dropdown */}
@@ -131,7 +184,7 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
 
         <button
           onClick={handleNewSession}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition flex-shrink-0"
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition shrink-0"
           title="New chat"
         >
           <Plus size={16} />
@@ -142,14 +195,14 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
       <div className="chat-messages" onClick={() => setShowSessions(false)}>
         {!activeSessionId ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-8 py-12">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-4">
+            <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-4">
               <Sparkles size={24} className="text-violet-500" />
             </div>
             <h3 className="text-base font-bold text-slate-800 mb-2">Ask about this document</h3>
-            <p className="text-sm text-slate-500 mb-6 max-w-[240px]">
+            <p className="text-sm text-slate-500 mb-6 max-w-60">
               I can answer questions, summarize content, and explain concepts from your uploaded PDF.
             </p>
-            <div className="space-y-2 w-full max-w-[260px]">
+            <div className="space-y-2 w-full max-w-65">
               {['Summarize this document', 'Explain the key concepts', 'What are the main findings?'].map((q) => (
                 <button
                   key={q}

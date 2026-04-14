@@ -6,7 +6,22 @@ import time
 settings = get_settings()
 client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
-MODEL = "gemini-2.5-flash"
+
+def _parse_model_candidates(raw: str, default_csv: str) -> List[str]:
+    source = raw or default_csv
+    models = [m.strip() for m in source.split(",") if m.strip()]
+    return models or [m.strip() for m in default_csv.split(",") if m.strip()]
+
+
+CHAT_MODEL_CANDIDATES = _parse_model_candidates(
+    settings.GEMINI_CHAT_MODELS,
+    "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash",
+)
+
+TASK_MODEL_CANDIDATES = _parse_model_candidates(
+    settings.GEMINI_TASK_MODELS,
+    "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash",
+)
 
 
 SYSTEM_PROMPT = """You are an academic AI assistant for university students named Mentora.
@@ -73,26 +88,57 @@ def build_conversation_history(messages: List[dict], limit: int = 5) -> str:
     return "\n".join(history_parts)
 
 
-def _generate_with_retry(prompt: str, max_retries: int = 3) -> str:
-    """Generate content with retry logic for rate limits."""
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
-            )
-            return response.text
-        except Exception as e:
-            error_str = str(e)
-            if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                wait_time = (2 ** attempt) * 5  # 5, 10, 20 seconds
-                print(f"Rate limited, retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})")
-                time.sleep(wait_time)
-                continue
-            else:
-                print(f"Gemini API Error: {e}")
-                raise
-    raise Exception("Max retries exceeded due to rate limiting")
+def _is_retryable_error(error: Exception) -> bool:
+    msg = str(error).upper()
+    retry_tokens = [
+        "429",
+        "RESOURCE_EXHAUSTED",
+        "RATE_LIMIT",
+        "UNAVAILABLE",
+        "TIMEOUT",
+        "DEADLINE_EXCEEDED",
+        "INTERNAL",
+        "500",
+        "503",
+    ]
+    return any(token in msg for token in retry_tokens)
+
+
+def _generate_with_fallback(prompt: str, model_candidates: List[str]) -> str:
+    """Generate with retries and multi-model failover to avoid single-point failure."""
+    retries_per_model = max(1, settings.GEMINI_MAX_RETRIES_PER_MODEL)
+    base_wait = max(0.5, settings.GEMINI_RETRY_BASE_SECONDS)
+    last_error: Optional[Exception] = None
+
+    for model_name in model_candidates:
+        for attempt in range(retries_per_model):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                response_text = getattr(response, "text", None)
+                if response_text and response_text.strip():
+                    return response_text.strip()
+                raise ValueError(f"Model {model_name} returned an empty response")
+            except Exception as err:
+                last_error = err
+                can_retry = _is_retryable_error(err)
+                is_last_attempt = attempt >= retries_per_model - 1
+
+                if can_retry and not is_last_attempt:
+                    wait_time = base_wait * (2 ** attempt)
+                    print(
+                        f"Gemini retry on {model_name} in {wait_time:.1f}s "
+                        f"(attempt {attempt + 1}/{retries_per_model})"
+                    )
+                    time.sleep(wait_time)
+                    continue
+
+                print(f"Gemini model {model_name} failed: {err}")
+                break
+
+    raise Exception(f"All Gemini models failed. Last error: {last_error}")
 
 
 async def generate_chat_response(
@@ -117,7 +163,7 @@ CONVERSATION HISTORY:
 STUDENT'S QUESTION: {question}"""
 
     try:
-        return _generate_with_retry(prompt)
+        return _generate_with_fallback(prompt, CHAT_MODEL_CANDIDATES)
     except Exception as e:
         print(f"Gemini API Error: {e}")
         return "Sorry, I'm currently experiencing technical difficulties connecting to the AI. Please try again in a moment."
@@ -142,7 +188,7 @@ Content:
 {text[:15000]}"""
 
     try:
-        return _generate_with_retry(prompt)
+        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES)
     except Exception as e:
         print(f"Summary generation error: {e}")
         return "Failed to generate summary. Please try again."
@@ -180,7 +226,7 @@ Content:
 {text[:15000]}"""
 
     try:
-        return _generate_with_retry(prompt)
+        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES)
     except Exception as e:
         print(f"Question generation error: {e}")
         return "[]"
@@ -206,7 +252,7 @@ Materials:
 {combined}"""
 
     try:
-        return _generate_with_retry(prompt)
+        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES)
     except Exception as e:
         print(f"Exam prediction error: {e}")
         return "[]"

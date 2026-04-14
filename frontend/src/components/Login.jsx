@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import AuthFrame from './AuthFrame';
+import SeoHead from './seo/SeoHead';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -34,14 +35,22 @@ const Login = () => {
   };
 
   return (
-    <AuthFrame
-      title="Welcome Back"
-      subtitle="Sign in to continue your AI-powered study workflow."
-      altText="Need an account?"
-      altLink="/register"
-      altLinkLabel="Create one"
-    >
-      <form className="space-y-5" onSubmit={handleSubmit} noValidate>
+    <>
+      <SeoHead
+        title="Login"
+        description="Sign in to Mentora to access your personalized study workspace."
+        path="/login"
+        robots="noindex, nofollow"
+      />
+
+      <AuthFrame
+        title="Welcome Back"
+        subtitle="Sign in to continue your AI-powered study workflow."
+        altText="Need an account?"
+        altLink="/register"
+        altLinkLabel="Create one"
+      >
+        <form className="space-y-5" onSubmit={handleSubmit} noValidate>
         {/* Email */}
         <div>
           <label className="block text-sm font-semibold text-slate-700 mb-2" htmlFor="email">
@@ -116,8 +125,9 @@ const Login = () => {
           {loading && <Loader2 size={15} className="animate-spin" />}
           {loading ? 'Signing In…' : 'Sign In'}
         </button>
-      </form>
-    </AuthFrame>
+        </form>
+      </AuthFrame>
+    </>
   );
 };
 

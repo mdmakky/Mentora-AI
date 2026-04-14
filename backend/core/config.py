@@ -26,6 +26,10 @@ class Settings(BaseSettings):
 
     # Google AI
     GOOGLE_API_KEY: str = "your-gemini-api-key"
+    GEMINI_CHAT_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
+    GEMINI_TASK_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
+    GEMINI_MAX_RETRIES_PER_MODEL: int = 2
+    GEMINI_RETRY_BASE_SECONDS: float = 2.0
 
     # App
     APP_NAME: str = "Mentora"

@@ -13,6 +13,8 @@ import ResetPassword from './components/ResetPassword';
 import LandingPage from './pages/LandingPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import GuidesPage from './pages/GuidesPage';
+import GuideArticlePage from './pages/GuideArticlePage';
 
 // App layout + pages
 import AppLayout from './components/layout/AppLayout';
@@ -57,6 +59,8 @@ function App() {
         } />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        <Route path="/guides" element={<GuidesPage />} />
+        <Route path="/guides/:slug" element={<GuideArticlePage />} />
 
         {/* Auth routes */}
         <Route path="/login" element={<Login />} />
