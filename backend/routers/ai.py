@@ -202,12 +202,6 @@ def _create_generation_run(
     }
 
     extended_payload = dict(minimal_payload)
-    extended_payload.update(
-        {
-            "generation_label": None,
-            "is_archived": False,
-        }
-    )
 
     try:
         db.table("question_generation_runs").insert(extended_payload).execute()
@@ -240,9 +234,9 @@ def _finalize_generation_run(db, run_id: Optional[str], generated_sets_count: in
             "status": status,
         }
         try:
-            db.table("question_generation_runs").update({**patch, "generation_label": label}).eq("id", run_id).execute()
-        except Exception:
             db.table("question_generation_runs").update(patch).eq("id", run_id).execute()
+        except Exception:
+            pass
     except Exception as e:
         print(f"[generate_practice] generation run finalize failed: {e}")
 
@@ -280,6 +274,43 @@ async def summarize_document(
 
     return result.data[0]
 
+
+
+@router.post("/practice-generations/{generation_id}/rename")
+async def rename_practice_generation(
+    generation_id: str,
+    generation_label: str = Body(default="", embed=True),
+    user: dict = Depends(get_current_user),
+):
+    """Compatibility endpoint for renaming generation runs when PATCH is unavailable."""
+    db = get_supabase_admin()
+
+    label = str(generation_label or "").strip()
+    if len(label) == 0:
+        label = None
+    if label and len(label) > 120:
+        raise HTTPException(status_code=400, detail="Generation label must be 120 chars or less")
+
+    try:
+        result = db.table("question_generation_runs") \
+            .update({"generation_label": label}) \
+            .eq("id", generation_id) \
+            .eq("user_id", user["id"]) \
+            .execute()
+    except Exception as e:
+        msg = str(e)
+        # Old schemas may not have generation_label yet.
+        if "generation_label" in msg or "PGRST204" in msg:
+            raise HTTPException(
+                status_code=409,
+                detail="Database migration required: missing question_generation_runs.generation_label. Run database/question_generation_runs_hotfix.sql in Supabase SQL editor, then retry.",
+            )
+        raise HTTPException(status_code=500, detail=f"Rename failed: {msg}")
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Generation run not found")
+
+    return result.data[0]
 
 @router.get("/summaries/{doc_id}")
 async def get_summaries(doc_id: str, user: dict = Depends(get_current_user)):
@@ -726,26 +757,14 @@ async def list_practice_questions(
     active_generation_id = generation_id
     if not include_all and not active_generation_id:
         try:
-            try:
-                runs_query = db.table("question_generation_runs") \
-                    .select("id") \
-                    .eq("course_id", course_id) \
-                    .eq("user_id", user["id"]) \
-                    .eq("is_archived", False) \
-                    .order("created_at", desc=True)
-                if question_type:
-                    runs_query = runs_query.eq("question_type", question_type)
-                run_ids = [r.get("id") for r in (runs_query.execute().data or []) if r.get("id")]
-            except Exception:
-                # Backward-compat: old schema without is_archived column.
-                runs_query = db.table("question_generation_runs") \
-                    .select("id") \
-                    .eq("course_id", course_id) \
-                    .eq("user_id", user["id"]) \
-                    .order("created_at", desc=True)
-                if question_type:
-                    runs_query = runs_query.eq("question_type", question_type)
-                run_ids = [r.get("id") for r in (runs_query.execute().data or []) if r.get("id")]
+            runs_query = db.table("question_generation_runs") \
+                .select("id") \
+                .eq("course_id", course_id) \
+                .eq("user_id", user["id"]) \
+                .order("created_at", desc=True)
+            if question_type:
+                runs_query = runs_query.eq("question_type", question_type)
+            run_ids = [r.get("id") for r in (runs_query.execute().data or []) if r.get("id")]
 
             # Choose the newest run that actually has rows.
             for run_id in run_ids:
@@ -823,44 +842,23 @@ async def list_practice_questions(
 async def list_practice_generations(
     course_id: str,
     question_type: Optional[str] = Query(default=None),
-    include_archived: bool = Query(default=False),
     user: dict = Depends(get_current_user),
 ):
     """List generation clusters for practice questions in a course."""
     db = get_supabase_admin()
     try:
         query = db.table("question_generation_runs") \
-            .select("id, question_type, generation_label, requested_count, generated_sets_count, saved_rows_count, failed_rows_count, status, is_archived, archived_at, created_at") \
+            .select("id, generation_label, question_type, generated_sets_count, saved_rows_count, failed_rows_count, status, created_at, source") \
             .eq("course_id", course_id) \
             .eq("user_id", user["id"]) \
             .order("created_at", desc=True)
         if question_type:
             query = query.eq("question_type", question_type)
-        if not include_archived:
-            query = query.eq("is_archived", False)
         result = query.execute()
         return result.data or []
-    except Exception:
-        # Backward-compatible fallback for partially migrated schemas.
-        try:
-            base_query = db.table("question_generation_runs") \
-                .select("id, question_type, requested_count, generated_sets_count, saved_rows_count, failed_rows_count, status, created_at") \
-                .eq("course_id", course_id) \
-                .eq("user_id", user["id"]) \
-                .order("created_at", desc=True)
-            if question_type:
-                base_query = base_query.eq("question_type", question_type)
-            result = base_query.execute()
-            rows = result.data or []
-            for row in rows:
-                row.setdefault("generation_label", None)
-                row.setdefault("is_archived", False)
-                row.setdefault("archived_at", None)
-            return rows
-        except Exception:
-            return []
-
-
+    except Exception as e:
+        print(f"[list_practice_generations] error: {e}")
+        return []
 @router.delete("/practice-questions/{course_id}/legacy")
 async def delete_legacy_practice_questions(
     course_id: str,
@@ -911,61 +909,6 @@ async def delete_legacy_practice_questions(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete legacy practice questions: {e}")
 
-
-@router.patch("/practice-generations/{generation_id}")
-async def update_practice_generation(
-    generation_id: str,
-    generation_label: Optional[str] = Body(default=None),
-    is_archived: Optional[bool] = Body(default=None),
-    user: dict = Depends(get_current_user),
-):
-    """Rename/archive a generation cluster."""
-    db = get_supabase_admin()
-
-    patch = {}
-
-    if generation_label is not None:
-        label = str(generation_label).strip()
-        if len(label) == 0:
-            label = None
-        if label and len(label) > 120:
-            raise HTTPException(status_code=400, detail="Generation label must be 120 chars or less")
-        patch["generation_label"] = label
-
-    if is_archived is not None:
-        patch["is_archived"] = bool(is_archived)
-        patch["archived_at"] = datetime.now(timezone.utc).isoformat() if is_archived else None
-
-    if not patch:
-        raise HTTPException(status_code=400, detail="No update fields provided")
-
-    try:
-        result = db.table("question_generation_runs") \
-            .update(patch) \
-            .eq("id", generation_id) \
-            .eq("user_id", user["id"]) \
-            .execute()
-    except Exception as e:
-        # Backward-compatible retry when optional columns are missing.
-        retry_patch = dict(patch)
-        retry_patch.pop("generation_label", None)
-        retry_patch.pop("is_archived", None)
-        retry_patch.pop("archived_at", None)
-        if not retry_patch:
-            raise HTTPException(status_code=500, detail=f"Failed to update generation: {e}")
-        try:
-            result = db.table("question_generation_runs") \
-                .update(retry_patch) \
-                .eq("id", generation_id) \
-                .eq("user_id", user["id"]) \
-                .execute()
-        except Exception as e2:
-            raise HTTPException(status_code=500, detail=f"Failed to update generation: {e2}")
-
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Generation run not found")
-
-    return result.data[0]
 
 
 @router.delete("/practice-generations/{generation_id}")

@@ -3,13 +3,15 @@ import {
   FlaskConical, Upload, Plus, X, Sparkles, FileQuestion,
   Brain, ChevronDown, RotateCcw, AlertCircle, CheckCircle2,
   Flame, TrendingUp, Minus, Loader2, BookOpen, Trash2, History,
-  Pencil, Archive, ArchiveRestore, Wrench, Check,
+  Pencil, Wrench, Check,
 } from 'lucide-react';
 import useQuestionLabStore from '../../stores/questionLabStore';
 import useDocumentStore from '../../stores/documentStore';
 import PatternInsightsPanel from './PatternInsightsPanel';
 import QuestionCard from './QuestionCard';
 import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import UploadModal from '../documents/UploadModal';
 
 const QUESTION_COUNTS = [5, 6, 7, 8];
@@ -70,18 +72,40 @@ const QuestionLabSection = ({ courseId, course }) => {
   const [editingLabel, setEditingLabel] = useState('');
   const [savingRunId, setSavingRunId] = useState(null);
   const [deletingRunId, setDeletingRunId] = useState(null);
+  const [runToDelete, setRunToDelete] = useState(null);
+  const [confirmDeleteLegacy, setConfirmDeleteLegacy] = useState(false);
+  const [popupState, setPopupState] = useState({ isOpen: false, title: '', message: '' });
   const renameInputRef = useRef(null);
   const topicInputRef = useRef(null);
+
+  const showPopup = useCallback((title, message) => {
+    setPopupState({ isOpen: true, title, message });
+  }, []);
+
+  const closePopup = useCallback(() => {
+    setPopupState((prev) => ({ ...prev, isOpen: false }));
+  }, []);
+
+  const formatError = useCallback((error, fallback) => {
+    if (!error) return fallback;
+    if (typeof error === 'string') return error;
+    if (error instanceof Error && error.message) return error.message;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return fallback;
+    }
+  }, []);
 
   const {
     hotTopics, hotTopicsLoading,
     patternData, analyzedAt, analyzeState, analyzeError,
     practiceQuestions, generateState, generateError, savedCount,
-    generationRuns, generationsLoading, selectedGenerationId, showArchivedGenerations,
+    generationRuns, generationsLoading, selectedGenerationId,
     paperCount,
     fetchHotTopics, addHotTopic, deleteHotTopic,
     loadCachedAnalysis, analyzePapers, generatePractice, loadSavedPractice, loadPracticeGenerations,
-    setSelectedGeneration, renameGeneration, archiveGeneration, deleteGeneration,
+    setSelectedGeneration, renameGeneration, deleteGeneration,
     deleteLegacyPractice, backfillLegacyGenerations,
     setPaperCount, resetSession,
   } = useQuestionLabStore();
@@ -123,9 +147,9 @@ const QuestionLabSection = ({ courseId, course }) => {
 
   useEffect(() => {
     if (!courseId) return;
-    loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    loadPracticeGenerations(courseId, qType);
     loadSavedPractice(courseId, { questionType: qType });
-  }, [courseId, qType, showArchivedGenerations, loadPracticeGenerations, loadSavedPractice]);
+  }, [courseId, qType, loadPracticeGenerations, loadSavedPractice]);
 
   const hasPapers = questionPapers.length > 0;
   const hasAnalysis = analyzeState === 'done' && patternData;
@@ -195,12 +219,12 @@ const QuestionLabSection = ({ courseId, course }) => {
     const result = await renameGeneration(run.id, editingLabel.trim());
     setSavingRunId(null);
     if (!result.success) {
-      window.alert(result.error || 'Could not rename generation');
+      showPopup('Rename Failed', formatError(result.error, 'Could not rename generation'));
       return;
     }
     setEditingRunId(null);
     setEditingLabel('');
-    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    await loadPracticeGenerations(courseId, qType);
   };
 
   const handleRenameKeyDown = (e, run) => {
@@ -209,73 +233,51 @@ const QuestionLabSection = ({ courseId, course }) => {
   };
 
   // ── Delete handler ───────────────────────────────────────────────────────
-  const handleDeleteGeneration = async (run) => {
-    const label = run.generation_label || `Run ${generationRuns.indexOf(run) + 1}`;
-    const ok = window.confirm(
-      `Delete "${label}" and ALL its questions permanently? This cannot be undone.`
-    );
-    if (!ok) return;
-
+  const executeDeleteGeneration = async (run) => {
     setDeletingRunId(run.id);
     const result = await deleteGeneration(run.id);
     setDeletingRunId(null);
 
     if (!result.success) {
-      window.alert(result.error || 'Could not delete generation');
+      showPopup('Delete Failed', formatError(result.error, 'Could not delete generation'));
       return;
     }
     // Reload questions for the next available run
-    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    await loadPracticeGenerations(courseId, qType);
     await loadSavedPractice(courseId, { questionType: qType });
   };
 
-  const handleToggleArchive = async (run, shouldArchive) => {
-    const result = await archiveGeneration(run.id, shouldArchive);
-    if (!result.success) {
-      window.alert(result.error || 'Could not update generation');
-      return;
-    }
-
-    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
-
-    if (shouldArchive && selectedGenerationId === run.id) {
-      setSelectedGeneration(null);
-      await loadSavedPractice(courseId, { questionType: qType });
-    }
+  const handleDeleteGeneration = (run) => {
+    setRunToDelete(run);
   };
 
-  const handleToggleShowArchived = async () => {
-    await loadPracticeGenerations(courseId, qType, !showArchivedGenerations);
-  };
-
-  const handleDeleteLegacyQuestions = async () => {
-    const ok = window.confirm(
-      `Delete old generated ${qType.toUpperCase()} questions for this course that are not linked to any generation run? This cannot be undone.`
-    );
-    if (!ok) return;
-
+  const executeDeleteLegacyQuestions = async () => {
     const result = await deleteLegacyPractice(courseId, qType);
     if (!result.success) {
-      window.alert(result.error || 'Could not delete legacy questions');
+      showPopup('Delete Failed', formatError(result.error, 'Could not delete legacy questions'));
       return;
     }
 
-    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    await loadPracticeGenerations(courseId, qType);
     await loadSavedPractice(courseId, { questionType: qType });
-    window.alert(`Deleted ${result.deletedCount || 0} legacy question rows.`);
+    showPopup('Legacy Questions Deleted', `Deleted ${result.deletedCount || 0} legacy question rows.`);
+  };
+
+  const handleDeleteLegacyQuestions = () => {
+    setConfirmDeleteLegacy(true);
   };
 
   const handleBackfillLegacyRuns = async () => {
     const result = await backfillLegacyGenerations(courseId, qType);
     if (!result.success) {
-      window.alert(result.error || 'Could not backfill legacy runs');
+      showPopup('Backfill Failed', formatError(result.error, 'Could not backfill legacy runs'));
       return;
     }
-    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    await loadPracticeGenerations(courseId, qType);
     await loadSavedPractice(courseId, { questionType: qType });
     const created = result.data?.created_count || 0;
     const linked = result.data?.linked_rows || 0;
-    window.alert(`Backfill complete. Created ${created} run(s), linked ${linked} legacy row(s).`);
+    showPopup('Backfill Complete', `Created ${created} run(s), linked ${linked} legacy row(s).`);
   };
 
   const handleReset = () => {
@@ -519,14 +521,6 @@ const QuestionLabSection = ({ courseId, course }) => {
               <div className="ql-run-history-title">
                 <History size={14} /> Generation History
               </div>
-              <button
-                type="button"
-                className="ql-run-history-toggle"
-                onClick={handleToggleShowArchived}
-                disabled={generationsLoading}
-              >
-                {showArchivedGenerations ? 'Hide Archived' : 'Show Archived'}
-              </button>
             </div>
 
             {generationsLoading ? (
@@ -539,10 +533,9 @@ const QuestionLabSection = ({ courseId, course }) => {
                   const active = selectedGenerationId === run.id;
                   const createdAt = run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown time';
                   const status = run.status || 'completed';
-                  const isArchived = !!run.is_archived;
                   const label = run.generation_label || `Run ${generationRuns.length - idx}`;
                   return (
-                    <div key={run.id} className={`ql-run-item ${active ? 'active' : ''} ${isArchived ? 'archived' : ''}`}>
+                    <div key={run.id} className={`ql-run-item ${active ? 'active' : ''}`}>
                       <button type="button" className="ql-run-main" onClick={() => handleSelectGeneration(run.id)}>
                         <div className="ql-run-label-row">
                           <span className="ql-run-label">{label}</span>
@@ -592,7 +585,7 @@ const QuestionLabSection = ({ courseId, course }) => {
                             </button>
                           </>
                         ) : (
-                          // Normal mode: rename | archive | delete
+                          // Normal mode: rename | delete
                           <>
                             <button
                               type="button"
@@ -602,25 +595,6 @@ const QuestionLabSection = ({ courseId, course }) => {
                             >
                               <Pencil size={13} />
                             </button>
-                            {!isArchived ? (
-                              <button
-                                type="button"
-                                className="ql-run-action-btn"
-                                onClick={() => handleToggleArchive(run, true)}
-                                title="Archive run"
-                              >
-                                <Archive size={13} />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="ql-run-action-btn"
-                                onClick={() => handleToggleArchive(run, false)}
-                                title="Restore run"
-                              >
-                                <ArchiveRestore size={13} />
-                              </button>
-                            )}
                             <button
                               type="button"
                               className="ql-run-action-btn ql-run-action-btn--danger"
@@ -679,9 +653,10 @@ const QuestionLabSection = ({ courseId, course }) => {
                   const when = run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown time';
                   const status = run.status || 'completed';
                   const sets = Number.isFinite(run.generated_sets_count) ? run.generated_sets_count : '?';
+                  const label = run.generation_label || `Run ${generationRuns.length - idx}`;
                   return (
                     <option key={run.id} value={run.id}>
-                      {`Run ${generationRuns.length - idx} · ${run.question_type?.toUpperCase?.() || qType.toUpperCase()} · ${sets} sets · ${status} · ${when}`}
+                      {`${label} · ${run.question_type?.toUpperCase?.() || qType.toUpperCase()} · ${sets} sets · ${status} · ${when}`}
                     </option>
                   );
                 })}
@@ -747,6 +722,36 @@ const QuestionLabSection = ({ courseId, course }) => {
         folderId={null}
         forceCategory="question_paper"
       />
+
+      <ConfirmDialog
+        isOpen={Boolean(runToDelete)}
+        onClose={() => setRunToDelete(null)}
+        onConfirm={() => {
+          if (runToDelete) {
+            void executeDeleteGeneration(runToDelete);
+          }
+        }}
+        title="Delete Generation Run"
+        message={`Delete "${runToDelete?.generation_label || 'this run'}" and all its saved questions permanently? This cannot be undone.`}
+        confirmLabel="Delete Run"
+        confirmVariant="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={confirmDeleteLegacy}
+        onClose={() => setConfirmDeleteLegacy(false)}
+        onConfirm={() => {
+          void executeDeleteLegacyQuestions();
+        }}
+        title="Delete Legacy Questions"
+        message={`Delete old generated ${qType.toUpperCase()} questions for this course that are not linked to any generation run? This cannot be undone.`}
+        confirmLabel="Delete Legacy"
+        confirmVariant="danger"
+      />
+
+      <Modal isOpen={popupState.isOpen} onClose={closePopup} title={popupState.title || 'Notice'} maxWidth="520px">
+        <p className="text-sm text-slate-700 leading-relaxed">{popupState.message}</p>
+      </Modal>
     </div>
   );
 };

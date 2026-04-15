@@ -25,7 +25,6 @@ const useQuestionLabStore = create((set, get) => ({
   generationRuns: [],
   generationsLoading: false,
   selectedGenerationId: null,
-  showArchivedGenerations: false,
 
   // How many past question papers are in this course
   paperCount: 0,
@@ -158,12 +157,11 @@ const useQuestionLabStore = create((set, get) => ({
     }
   },
 
-  loadPracticeGenerations: async (courseId, questionType = null, includeArchived = false) => {
+  loadPracticeGenerations: async (courseId, questionType = null) => {
     set({ generationsLoading: true });
     try {
       const params = new URLSearchParams();
       if (questionType) params.set('question_type', questionType);
-      if (includeArchived) params.set('include_archived', 'true');
       const suffix = params.toString() ? `?${params.toString()}` : '';
       const data = await apiClient.get(`/ai/practice-generations/${courseId}${suffix}`);
       const runsRaw = Array.isArray(data) ? data : [];
@@ -176,7 +174,6 @@ const useQuestionLabStore = create((set, get) => ({
       set((s) => ({
         generationRuns: runs,
         selectedGenerationId: s.selectedGenerationId || preferredRunId,
-        showArchivedGenerations: includeArchived,
         generationsLoading: false,
       }));
       return { success: true, data: runs };
@@ -191,27 +188,13 @@ const useQuestionLabStore = create((set, get) => ({
   renameGeneration: async (generationId, label) => {
     try {
       const payload = { generation_label: label };
-      const data = await apiClient.patch(`/ai/practice-generations/${generationId}`, payload);
+      const data = await apiClient.post(`/ai/practice-generations/${generationId}/rename`, payload);
       set((s) => ({
         generationRuns: s.generationRuns.map((r) => (r.id === generationId ? { ...r, ...data } : r)),
       }));
       return { success: true, data };
     } catch (err) {
       return { success: false, error: err.message || 'Failed to rename generation' };
-    }
-  },
-
-  archiveGeneration: async (generationId, isArchived = true) => {
-    try {
-      const payload = { is_archived: isArchived };
-      const data = await apiClient.patch(`/ai/practice-generations/${generationId}`, payload);
-      set((s) => ({
-        generationRuns: s.generationRuns.map((r) => (r.id === generationId ? { ...r, ...data } : r)),
-        selectedGenerationId: s.selectedGenerationId === generationId && isArchived ? null : s.selectedGenerationId,
-      }));
-      return { success: true, data };
-    } catch (err) {
-      return { success: false, error: err.message || 'Failed to update generation archive state' };
     }
   },
 
@@ -273,7 +256,6 @@ const useQuestionLabStore = create((set, get) => ({
     generationRuns: [],
     generationsLoading: false,
     selectedGenerationId: null,
-    showArchivedGenerations: false,
     paperCount: 0,
   }),
 }));
