@@ -1,6 +1,11 @@
 from google import genai
 from typing import List, Optional
 from core.config import get_settings
+from services.groq_service import (
+    generate_groq_completion,
+    GROQ_CHAT_MODEL_CANDIDATES,
+    GROQ_TASK_MODEL_CANDIDATES,
+)
 import time
 
 settings = get_settings()
@@ -104,7 +109,12 @@ def _is_retryable_error(error: Exception) -> bool:
     return any(token in msg for token in retry_tokens)
 
 
-def _generate_with_fallback(prompt: str, model_candidates: List[str]) -> str:
+def _generate_with_fallback(
+    prompt: str,
+    model_candidates: List[str],
+    groq_model_candidates: Optional[List[str]] = None,
+    system_prompt: Optional[str] = None,
+) -> str:
     """Generate with retries and multi-model failover to avoid single-point failure."""
     retries_per_model = max(1, settings.GEMINI_MAX_RETRIES_PER_MODEL)
     base_wait = max(0.5, settings.GEMINI_RETRY_BASE_SECONDS)
@@ -138,7 +148,17 @@ def _generate_with_fallback(prompt: str, model_candidates: List[str]) -> str:
                 print(f"Gemini model {model_name} failed: {err}")
                 break
 
-    raise Exception(f"All Gemini models failed. Last error: {last_error}")
+    if settings.GROQ_API_KEY:
+        try:
+            return generate_groq_completion(
+                prompt=prompt,
+                model_candidates=groq_model_candidates or GROQ_TASK_MODEL_CANDIDATES,
+                system_prompt=system_prompt,
+            )
+        except Exception as groq_error:
+            last_error = groq_error
+
+    raise Exception(f"All Gemini/Groq models failed. Last error: {last_error}")
 
 
 async def generate_chat_response(
@@ -163,7 +183,12 @@ CONVERSATION HISTORY:
 STUDENT'S QUESTION: {question}"""
 
     try:
-        return _generate_with_fallback(prompt, CHAT_MODEL_CANDIDATES)
+        return _generate_with_fallback(
+            prompt,
+            CHAT_MODEL_CANDIDATES,
+            groq_model_candidates=GROQ_CHAT_MODEL_CANDIDATES,
+            system_prompt=SYSTEM_PROMPT,
+        )
     except Exception as e:
         print(f"Gemini API Error: {e}")
         return "Sorry, I'm currently experiencing technical difficulties connecting to the AI. Please try again in a moment."
@@ -188,7 +213,7 @@ Content:
 {text[:15000]}"""
 
     try:
-        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES)
+        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES, groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES)
     except Exception as e:
         print(f"Summary generation error: {e}")
         return "Failed to generate summary. Please try again."
@@ -226,9 +251,101 @@ Content:
 {text[:15000]}"""
 
     try:
-        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES)
+        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES, groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES)
     except Exception as e:
         print(f"Question generation error: {e}")
+        return "[]"
+
+
+async def generate_practice_from_analysis(
+    pattern_data: dict,
+    hot_topics: List[str],
+    course_content: str,
+    course_name: str,
+    count: int = 10,
+    question_type: str = "broad",
+) -> str:
+    """
+    Generate exam-style practice questions that mirror the real paper format.
+    Uses the analyzed question pattern, teacher's hot topics, and RAG course content.
+    """
+    exam_format = pattern_data.get("exam_format", {})
+    repeat_topics = pattern_data.get("repeat_topics", [])
+    high_prob = pattern_data.get("high_probability_topics", [])
+    sample_format = pattern_data.get("sample_question_format", "")
+
+    repeat_topics_str = "\n".join(
+        f"  - {t['topic']}: appeared {t['frequency']} times (marks: {t.get('typical_marks', '?')})"
+        for t in repeat_topics[:20]
+    )
+    hot_topics_str = "\n".join(f"  - {t}" for t in hot_topics) if hot_topics else "  (none provided)"
+
+    type_instruction = {
+        "broad": "broad/essay-type questions with sub-parts (a, b, c) matching the real exam style",
+        "short": "short-answer questions (2-4 marks each)",
+        "mcq": "multiple-choice questions with 4 options (A, B, C, D) and mark the correct answer",
+    }.get(question_type, "broad/essay-type questions")
+
+    prompt = f"""You are an expert exam question generator for the course: "{course_name}".
+
+REAL EXAM FORMAT (from past paper analysis):
+- Total marks: {exam_format.get('total_marks', 72)}
+- Total question sets: {exam_format.get('total_sets', 8)}, answer any {exam_format.get('answer_required', 6)}
+- Time: {exam_format.get('time_hours', 3)} hours
+- Sub-question style: {exam_format.get('sub_question_style', 'a/b/c')}
+- Marks distribution: {exam_format.get('marks_distribution', 'varies')}
+- Sample format from real paper: {sample_format}
+
+REPEAT TOPICS (appeared in past papers — HIGH PRIORITY):
+{repeat_topics_str}
+
+HOT TOPICS (emphasized by teacher — HIGH PRIORITY):
+{hot_topics_str}
+
+HIGH PROBABILITY TOPICS: {', '.join(high_prob[:10]) if high_prob else 'see repeat topics'}
+
+COURSE CONTENT CONTEXT (for factual accuracy):
+---
+{course_content[:8000]}
+---
+
+TASK:
+Generate exactly {count} practice question SETS in {type_instruction}.
+
+CRITICAL RULES:
+1. EXACTLY mirror the real exam format — use the same set structure, sub-parts, and marks notation
+2. Prioritize repeat topics and hot topics for question content
+3. Each set should have 2-3 sub-parts (a, b, c) with marks like the real paper
+4. Include a "probability" field: "high" (repeat + hot topic), "medium" (repeat OR hot), "low" (general)
+5. Include a "topic" field for each set
+
+Return ONLY a JSON array — no markdown, no explanation:
+[
+  {{
+    "set_number": 1,
+    "probability": "high",
+    "topic": "main topic",
+    "parts": [
+      {{
+        "label": "a",
+        "question": "question text",
+        "marks": 3,
+        "type": "{question_type}"
+      }},
+      {{
+        "label": "b",
+        "question": "question text",
+        "marks": 5,
+        "type": "{question_type}"
+      }}
+    ]
+  }}
+]"""
+
+    try:
+        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES, groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES)
+    except Exception as e:
+        print(f"Practice generation error: {e}")
         return "[]"
 
 
@@ -252,7 +369,7 @@ Materials:
 {combined}"""
 
     try:
-        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES)
+        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES, groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES)
     except Exception as e:
         print(f"Exam prediction error: {e}")
         return "[]"

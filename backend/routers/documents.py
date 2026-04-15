@@ -17,7 +17,13 @@ import httpx
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
-ALLOWED_TYPES = {"application/pdf": "pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx"}
+ALLOWED_TYPES = {
+    "application/pdf": "pdf", 
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", 
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
@@ -39,7 +45,7 @@ async def upload_document(
     # Validate file type
     file_type = ALLOWED_TYPES.get(file.content_type)
     if not file_type:
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, and PPTX files are allowed")
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, PPTX, JPG, and PNG files are allowed")
 
     # Read file
     file_bytes = await file.read()
@@ -52,10 +58,19 @@ async def upload_document(
     # Calculate file hash
     file_hash = calculate_file_hash(file_bytes)
 
-    # Check for duplicates
-    dup_check = db.table("documents").select("id").eq("file_hash", file_hash).eq("user_id", user["id"]).eq("is_deleted", False).execute()
+    # Check for duplicates only within the same course.
+    # Users may legitimately reuse the same file across different courses.
+    dup_check = (
+        db.table("documents")
+        .select("id")
+        .eq("file_hash", file_hash)
+        .eq("user_id", user["id"])
+        .eq("course_id", course_id)
+        .eq("is_deleted", False)
+        .execute()
+    )
     if dup_check.data:
-        raise HTTPException(status_code=400, detail="This file has already been uploaded")
+        raise HTTPException(status_code=400, detail="This file has already been uploaded to this course")
 
     # Auto-convert DOCX and PPTX files to PDF using LibreOffice
     if file_type in ["docx", "pptx"]:
@@ -75,22 +90,28 @@ async def upload_document(
     page_count = 0
     if file_type == "pdf":
         page_count = get_pdf_page_count(file_bytes)
+    elif file_type in ["jpg", "png"]:
+        page_count = 1
 
     # Upload to Supabase Storage
     cloud_result = upload_file(file_bytes, user["id"], course_id, doc_id, file.filename)
 
-    # Run copyright check
+    # Run copyright check (skip entirely for question_paper)
     pages = []
-    if file_type == "pdf":
-        pages = extract_text_from_pdf(file_bytes)
-    elif file_type == "docx":
-        pages = extract_text_from_docx(file_bytes)
-    elif file_type == "pptx":
-        pages = extract_text_from_pptx(file_bytes)
+    is_flagged = False
+    flag_reason = ""
 
-    is_flagged, flag_reason = run_copyright_check(file_bytes, pages, file_hash, user["id"], db)
+    if doc_category != "question_paper":
+        if file_type == "pdf":
+            pages = extract_text_from_pdf(file_bytes)
+        elif file_type == "docx":
+            pages = extract_text_from_docx(file_bytes)
+        elif file_type == "pptx":
+            pages = extract_text_from_pptx(file_bytes)
+        
+        is_flagged, flag_reason = run_copyright_check(file_bytes, pages, file_hash, user["id"], db)
 
-    processing_status = "quarantined" if is_flagged else "pending"
+    processing_status = "quarantined" if is_flagged else ("ready" if doc_category == "question_paper" else "pending")
 
     # Save document record
     doc_data = {
@@ -113,8 +134,8 @@ async def upload_document(
 
     result = db.table("documents").insert(doc_data).execute()
 
-    # If not quarantined, start processing pipeline
-    if not is_flagged:
+    # If not quarantined, start RAG processing pipeline (skip for question_paper)
+    if not is_flagged and doc_category != "question_paper":
         background_tasks.add_task(
             process_document_pipeline,
             doc_id, course_id, user["id"], file_bytes, file_type, file.filename,
