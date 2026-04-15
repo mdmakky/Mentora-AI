@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from typing import List
 from schemas.course import CourseCreate, CourseUpdate, CourseResponse, ReorderRequest
 from core.database import get_supabase_admin
@@ -72,3 +72,58 @@ async def reorder_courses(data: ReorderRequest, user: dict = Depends(get_current
     for item in data.items:
         db.table("courses").update({"sort_order": item["sort_order"]}).eq("id", item["id"]).eq("user_id", user["id"]).execute()
     return {"message": "Courses reordered"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HOT TOPICS (per course, for Question Lab)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{course_id}/hot-topics")
+async def get_hot_topics(course_id: str, user: dict = Depends(get_current_user)):
+    """Get all hot topics for a course."""
+    db = get_supabase_admin()
+    result = db.table("course_hot_topics") \
+        .select("*") \
+        .eq("course_id", course_id) \
+        .eq("user_id", user["id"]) \
+        .order("created_at") \
+        .execute()
+    return result.data or []
+
+
+@router.post("/{course_id}/hot-topics", status_code=201)
+async def add_hot_topic(
+    course_id: str,
+    topic: str = Body(..., embed=True),
+    user: dict = Depends(get_current_user),
+):
+    """Add a hot topic to a course."""
+    db = get_supabase_admin()
+    # Verify course ownership
+    course = db.table("courses").select("id").eq("id", course_id).eq("user_id", user["id"]).single().execute()
+    if not course.data:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    result = db.table("course_hot_topics").insert({
+        "course_id": course_id,
+        "user_id": user["id"],
+        "topic": topic.strip(),
+    }).execute()
+    return result.data[0]
+
+
+@router.delete("/{course_id}/hot-topics/{topic_id}")
+async def delete_hot_topic(
+    course_id: str,
+    topic_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Delete a hot topic from a course."""
+    db = get_supabase_admin()
+    db.table("course_hot_topics") \
+        .delete() \
+        .eq("id", topic_id) \
+        .eq("course_id", course_id) \
+        .eq("user_id", user["id"]) \
+        .execute()
+    return {"message": "Topic deleted"}
