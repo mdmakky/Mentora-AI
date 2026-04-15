@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   FlaskConical, Upload, Plus, X, Sparkles, FileQuestion,
   Brain, ChevronDown, RotateCcw, AlertCircle, CheckCircle2,
-  Flame, TrendingUp, Minus, Loader2, BookOpen, Trash2,
+  Flame, TrendingUp, Minus, Loader2, BookOpen, Trash2, History,
+  Pencil, Archive, ArchiveRestore, Wrench, Check,
 } from 'lucide-react';
 import useQuestionLabStore from '../../stores/questionLabStore';
 import useDocumentStore from '../../stores/documentStore';
@@ -64,15 +65,24 @@ const QuestionLabSection = ({ courseId, course }) => {
   const [newTopic, setNewTopic] = useState('');
   const [expandedGroup, setExpandedGroup] = useState({ high: true, medium: true, low: false });
   const [deletingPaperIds, setDeletingPaperIds] = useState([]);
+  // Inline rename state
+  const [editingRunId, setEditingRunId] = useState(null);
+  const [editingLabel, setEditingLabel] = useState('');
+  const [savingRunId, setSavingRunId] = useState(null);
+  const [deletingRunId, setDeletingRunId] = useState(null);
+  const renameInputRef = useRef(null);
   const topicInputRef = useRef(null);
 
   const {
     hotTopics, hotTopicsLoading,
     patternData, analyzedAt, analyzeState, analyzeError,
     practiceQuestions, generateState, generateError, savedCount,
+    generationRuns, generationsLoading, selectedGenerationId, showArchivedGenerations,
     paperCount,
     fetchHotTopics, addHotTopic, deleteHotTopic,
-    loadCachedAnalysis, analyzePapers, generatePractice, loadSavedPractice,
+    loadCachedAnalysis, analyzePapers, generatePractice, loadSavedPractice, loadPracticeGenerations,
+    setSelectedGeneration, renameGeneration, archiveGeneration, deleteGeneration,
+    deleteLegacyPractice, backfillLegacyGenerations,
     setPaperCount, resetSession,
   } = useQuestionLabStore();
 
@@ -106,9 +116,16 @@ const QuestionLabSection = ({ courseId, course }) => {
       })();
       fetchHotTopics(courseId);
       loadCachedAnalysis(courseId);
-      loadSavedPractice(courseId);
+      loadPracticeGenerations(courseId, 'broad', false);
+      loadSavedPractice(courseId, { questionType: 'broad' });
     }
-  }, [courseId, fetchDocuments, fetchHotTopics, loadCachedAnalysis, loadSavedPractice, resetSession]);
+  }, [courseId, fetchDocuments, fetchHotTopics, loadCachedAnalysis, loadPracticeGenerations, loadSavedPractice, resetSession]);
+
+  useEffect(() => {
+    if (!courseId) return;
+    loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    loadSavedPractice(courseId, { questionType: qType });
+  }, [courseId, qType, showArchivedGenerations, loadPracticeGenerations, loadSavedPractice]);
 
   const hasPapers = questionPapers.length > 0;
   const hasAnalysis = analyzeState === 'done' && patternData;
@@ -131,6 +148,134 @@ const QuestionLabSection = ({ courseId, course }) => {
   const handleGenerate = async () => {
     await generatePractice(courseId, { count: qCount, questionType: qType });
     setExpandedGroup({ high: true, medium: true, low: false });
+  };
+
+  const handleChangeType = (type) => {
+    if (type === qType) return;
+    setQType(type);
+    setSelectedGeneration(null);
+    setExpandedGroup({ high: true, medium: true, low: false });
+  };
+
+  const handleSelectGeneration = async (generationId) => {
+    const picked = generationRuns.find((run) => run.id === generationId);
+
+    // Empty runs were created during early migration glitches; fall back to available legacy rows.
+    if (picked && (picked.saved_rows_count || 0) === 0) {
+      setSelectedGeneration(null);
+      await loadSavedPractice(courseId, { questionType: qType });
+      setExpandedGroup({ high: true, medium: true, low: false });
+      return;
+    }
+
+    setSelectedGeneration(generationId || null);
+    if (!courseId) return;
+    await loadSavedPractice(courseId, {
+      questionType: qType,
+      generationId: generationId || null,
+    });
+    setExpandedGroup({ high: true, medium: true, low: false });
+  };
+
+  // ── Inline rename handlers ────────────────────────────────────────────────
+  const handleStartRename = (run) => {
+    setEditingRunId(run.id);
+    setEditingLabel(run.generation_label || '');
+    // Focus the input on next tick
+    setTimeout(() => renameInputRef.current?.select(), 20);
+  };
+
+  const handleCancelRename = () => {
+    setEditingRunId(null);
+    setEditingLabel('');
+  };
+
+  const handleSaveRename = async (run) => {
+    setSavingRunId(run.id);
+    const result = await renameGeneration(run.id, editingLabel.trim());
+    setSavingRunId(null);
+    if (!result.success) {
+      window.alert(result.error || 'Could not rename generation');
+      return;
+    }
+    setEditingRunId(null);
+    setEditingLabel('');
+    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+  };
+
+  const handleRenameKeyDown = (e, run) => {
+    if (e.key === 'Enter') handleSaveRename(run);
+    if (e.key === 'Escape') handleCancelRename();
+  };
+
+  // ── Delete handler ───────────────────────────────────────────────────────
+  const handleDeleteGeneration = async (run) => {
+    const label = run.generation_label || `Run ${generationRuns.indexOf(run) + 1}`;
+    const ok = window.confirm(
+      `Delete "${label}" and ALL its questions permanently? This cannot be undone.`
+    );
+    if (!ok) return;
+
+    setDeletingRunId(run.id);
+    const result = await deleteGeneration(run.id);
+    setDeletingRunId(null);
+
+    if (!result.success) {
+      window.alert(result.error || 'Could not delete generation');
+      return;
+    }
+    // Reload questions for the next available run
+    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    await loadSavedPractice(courseId, { questionType: qType });
+  };
+
+  const handleToggleArchive = async (run, shouldArchive) => {
+    const result = await archiveGeneration(run.id, shouldArchive);
+    if (!result.success) {
+      window.alert(result.error || 'Could not update generation');
+      return;
+    }
+
+    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+
+    if (shouldArchive && selectedGenerationId === run.id) {
+      setSelectedGeneration(null);
+      await loadSavedPractice(courseId, { questionType: qType });
+    }
+  };
+
+  const handleToggleShowArchived = async () => {
+    await loadPracticeGenerations(courseId, qType, !showArchivedGenerations);
+  };
+
+  const handleDeleteLegacyQuestions = async () => {
+    const ok = window.confirm(
+      `Delete old generated ${qType.toUpperCase()} questions for this course that are not linked to any generation run? This cannot be undone.`
+    );
+    if (!ok) return;
+
+    const result = await deleteLegacyPractice(courseId, qType);
+    if (!result.success) {
+      window.alert(result.error || 'Could not delete legacy questions');
+      return;
+    }
+
+    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    await loadSavedPractice(courseId, { questionType: qType });
+    window.alert(`Deleted ${result.deletedCount || 0} legacy question rows.`);
+  };
+
+  const handleBackfillLegacyRuns = async () => {
+    const result = await backfillLegacyGenerations(courseId, qType);
+    if (!result.success) {
+      window.alert(result.error || 'Could not backfill legacy runs');
+      return;
+    }
+    await loadPracticeGenerations(courseId, qType, showArchivedGenerations);
+    await loadSavedPractice(courseId, { questionType: qType });
+    const created = result.data?.created_count || 0;
+    const linked = result.data?.linked_rows || 0;
+    window.alert(`Backfill complete. Created ${created} run(s), linked ${linked} legacy row(s).`);
   };
 
   const handleReset = () => {
@@ -299,7 +444,7 @@ const QuestionLabSection = ({ courseId, course }) => {
                   <button
                     key={t.value}
                     className={`ql-type-btn ${qType === t.value ? 'active' : ''}`}
-                    onClick={() => setQType(t.value)}
+                    onClick={() => handleChangeType(t.value)}
                     title={t.desc}
                   >{t.label}</button>
                 ))}
@@ -358,11 +503,144 @@ const QuestionLabSection = ({ courseId, course }) => {
               <AlertCircle size={14} /> {generateError}
             </div>
           )}
+          {!generateError && hasAnalysis && !hasQuestions && (
+            <div className="ql-progress-hint">
+              No saved {qType.toUpperCase()} questions found yet. Generate again or use a different question type.
+            </div>
+          )}
           {analyzeState === 'loading' && (
             <p className="ql-progress-hint">
               📄 Reading your question papers as images for accurate table/box detection… This may take 20–60 seconds.
             </p>
           )}
+
+          <div className="ql-run-history-panel">
+            <div className="ql-run-history-head">
+              <div className="ql-run-history-title">
+                <History size={14} /> Generation History
+              </div>
+              <button
+                type="button"
+                className="ql-run-history-toggle"
+                onClick={handleToggleShowArchived}
+                disabled={generationsLoading}
+              >
+                {showArchivedGenerations ? 'Hide Archived' : 'Show Archived'}
+              </button>
+            </div>
+
+            {generationsLoading ? (
+              <div className="ql-run-history-loading"><Loader2 size={13} className="spin" /> Loading runs…</div>
+            ) : generationRuns.length === 0 ? (
+              <div className="ql-run-history-empty">No generation runs for this question type yet.</div>
+            ) : (
+              <div className="ql-run-list">
+                {generationRuns.map((run, idx) => {
+                  const active = selectedGenerationId === run.id;
+                  const createdAt = run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown time';
+                  const status = run.status || 'completed';
+                  const isArchived = !!run.is_archived;
+                  const label = run.generation_label || `Run ${generationRuns.length - idx}`;
+                  return (
+                    <div key={run.id} className={`ql-run-item ${active ? 'active' : ''} ${isArchived ? 'archived' : ''}`}>
+                      <button type="button" className="ql-run-main" onClick={() => handleSelectGeneration(run.id)}>
+                        <div className="ql-run-label-row">
+                          <span className="ql-run-label">{label}</span>
+                          <span className={`ql-run-status status-${status}`}>{status}</span>
+                        </div>
+                        <div className="ql-run-meta">
+                          <span>{run.question_type?.toUpperCase?.() || qType.toUpperCase()}</span>
+                          <span>{run.generated_sets_count ?? 0} sets</span>
+                          <span>{run.saved_rows_count ?? 0} saved</span>
+                          {(run.failed_rows_count || 0) > 0 && <span>{run.failed_rows_count} failed</span>}
+                          <span>{createdAt}</span>
+                        </div>
+                      </button>
+                      <div className="ql-run-actions">
+                        {editingRunId === run.id ? (
+                          // Inline rename edit mode
+                          <>
+                            <input
+                              ref={renameInputRef}
+                              type="text"
+                              value={editingLabel}
+                              onChange={(e) => setEditingLabel(e.target.value)}
+                              onKeyDown={(e) => handleRenameKeyDown(e, run)}
+                              className="ql-run-rename-input"
+                              placeholder="Run label…"
+                              maxLength={120}
+                              disabled={savingRunId === run.id}
+                            />
+                            <button
+                              type="button"
+                              className="ql-run-action-btn ql-run-action-btn--save"
+                              onClick={() => handleSaveRename(run)}
+                              disabled={savingRunId === run.id}
+                              title="Save name"
+                            >
+                              {savingRunId === run.id
+                                ? <Loader2 size={13} className="spin" />
+                                : <Check size={13} />}
+                            </button>
+                            <button
+                              type="button"
+                              className="ql-run-action-btn"
+                              onClick={handleCancelRename}
+                              title="Cancel"
+                            >
+                              <X size={13} />
+                            </button>
+                          </>
+                        ) : (
+                          // Normal mode: rename | archive | delete
+                          <>
+                            <button
+                              type="button"
+                              className="ql-run-action-btn"
+                              onClick={() => handleStartRename(run)}
+                              title="Rename run"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            {!isArchived ? (
+                              <button
+                                type="button"
+                                className="ql-run-action-btn"
+                                onClick={() => handleToggleArchive(run, true)}
+                                title="Archive run"
+                              >
+                                <Archive size={13} />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="ql-run-action-btn"
+                                onClick={() => handleToggleArchive(run, false)}
+                                title="Restore run"
+                              >
+                                <ArchiveRestore size={13} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="ql-run-action-btn ql-run-action-btn--danger"
+                              onClick={() => handleDeleteGeneration(run)}
+                              disabled={deletingRunId === run.id}
+                              title="Delete run and all its questions"
+                            >
+                              {deletingRunId === run.id
+                                ? <Loader2 size={13} className="spin" />
+                                : <Trash2 size={13} />}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -385,6 +663,47 @@ const QuestionLabSection = ({ courseId, course }) => {
                 <h3>Practice Questions</h3>
                 <p>{practiceQuestions.length} sets generated · matching your exam format</p>
               </div>
+            </div>
+            <div className="ql-generation-controls">
+              <label className="ql-generation-label">
+                <History size={13} /> Generation
+              </label>
+              <select
+                className="ql-generation-select"
+                value={selectedGenerationId || ''}
+                onChange={(e) => handleSelectGeneration(e.target.value)}
+                disabled={generationsLoading || generationRuns.length === 0}
+              >
+                {generationRuns.length === 0 && <option value="">No saved generations</option>}
+                {generationRuns.map((run, idx) => {
+                  const when = run.created_at ? new Date(run.created_at).toLocaleString() : 'Unknown time';
+                  const status = run.status || 'completed';
+                  const sets = Number.isFinite(run.generated_sets_count) ? run.generated_sets_count : '?';
+                  return (
+                    <option key={run.id} value={run.id}>
+                      {`Run ${generationRuns.length - idx} · ${run.question_type?.toUpperCase?.() || qType.toUpperCase()} · ${sets} sets · ${status} · ${when}`}
+                    </option>
+                  );
+                })}
+              </select>
+              {generationRuns.length === 0 && practiceQuestions.length > 0 && (
+                <div className="ql-legacy-actions">
+                  <button
+                    type="button"
+                    className="ql-backfill-btn"
+                    onClick={handleBackfillLegacyRuns}
+                  >
+                    <Wrench size={12} /> Convert Legacy To Generation
+                  </button>
+                  <button
+                    type="button"
+                    className="ql-delete-legacy-btn"
+                    onClick={handleDeleteLegacyQuestions}
+                  >
+                    <Trash2 size={12} /> Delete Legacy Questions
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

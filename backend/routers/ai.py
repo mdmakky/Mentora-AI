@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from typing import List, Optional
 import json
 import re
+import uuid
+import ast
+from datetime import datetime, timezone
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user
 from services.gemini_service import (
@@ -15,6 +18,104 @@ from services.vision_service import (
 )
 
 router = APIRouter(prefix="/ai", tags=["AI Features"])
+
+
+def _extract_json_candidates(raw: str) -> List[str]:
+    text = (raw or "").strip()
+    if "```json" in text:
+        text = text.split("```json", 1)[1].split("```", 1)[0].strip()
+    elif "```" in text:
+        text = text.split("```", 1)[1].split("```", 1)[0].strip()
+
+    candidates = [text]
+
+    arr_start = text.find("[")
+    arr_end = text.rfind("]")
+    if arr_start != -1 and arr_end > arr_start:
+        candidates.append(text[arr_start:arr_end + 1])
+
+    obj_start = text.find("{")
+    obj_end = text.rfind("}")
+    if obj_start != -1 and obj_end > obj_start:
+        candidates.append(text[obj_start:obj_end + 1])
+
+    # Deduplicate while preserving order
+    unique = []
+    seen = set()
+    for c in candidates:
+        if c and c not in seen:
+            unique.append(c)
+            seen.add(c)
+    return unique
+
+
+def _parse_practice_json(raw: str) -> List[dict]:
+    """Best-effort parse for model output that may be almost-JSON."""
+    candidates = _extract_json_candidates(raw)
+    decoder = json.JSONDecoder()
+    last_error = None
+
+    for candidate in candidates:
+        # 1) Strict JSON
+        try:
+            parsed = json.loads(candidate)
+            if isinstance(parsed, list):
+                return parsed
+        except Exception as err:
+            last_error = err
+
+        # 2) JSON prefix (ignores trailing commentary)
+        try:
+            parsed, _ = decoder.raw_decode(candidate)
+            if isinstance(parsed, list):
+                return parsed
+        except Exception as err:
+            last_error = err
+
+        # 3) Normalize stray backslashes + trailing commas
+        try:
+            normalized = re.sub(r"\\(?![\"\\/bfnrtu])", r"\\\\", candidate)
+            normalized = re.sub(r",\s*([}\]])", r"\1", normalized)
+            parsed = json.loads(normalized)
+            if isinstance(parsed, list):
+                return parsed
+        except Exception as err:
+            last_error = err
+
+        # 4) Python-literal style fallback (single quotes etc.)
+        try:
+            py_style = candidate
+            py_style = re.sub(r"\bnull\b", "None", py_style)
+            py_style = re.sub(r"\btrue\b", "True", py_style)
+            py_style = re.sub(r"\bfalse\b", "False", py_style)
+            parsed = ast.literal_eval(py_style)
+            if isinstance(parsed, list):
+                return parsed
+        except Exception as err:
+            last_error = err
+
+        # 5) Bracket-counting: extract the longest balanced [...] array
+        try:
+            depth = 0
+            start_idx = None
+            for char_idx, ch in enumerate(candidate):
+                if ch == "[" and depth == 0:
+                    start_idx = char_idx
+                    depth = 1
+                elif ch == "[":
+                    depth += 1
+                elif ch == "]":
+                    depth -= 1
+                    if depth == 0 and start_idx is not None:
+                        extracted = candidate[start_idx: char_idx + 1]
+                        parsed = json.loads(extracted)
+                        if isinstance(parsed, list):
+                            return parsed
+                        break
+        except Exception as err:
+            last_error = err
+
+    raise last_error or ValueError("Could not parse practice JSON")
 
 
 def _group_practice_rows(rows: List[dict]) -> List[dict]:
@@ -39,6 +140,7 @@ def _group_practice_rows(rows: List[dict]) -> List[dict]:
                 "set_number": set_number,
                 "probability": row.get("probability") or "medium",
                 "topic": row.get("topic") or "General",
+                "generation_id": row.get("generation_run_id"),
                 "parts": [],
             }
 
@@ -65,11 +167,84 @@ def _group_practice_rows(rows: List[dict]) -> List[dict]:
                 "question": question_text,
                 "answer": row.get("answer_text") or "",
                 "marks": marks,
+                "options": row.get("options") or None,  # carry MCQ options from DB
             }
         )
 
     ordered = sorted(grouped.values(), key=lambda item: item.get("set_number", 1))
     return ordered
+
+
+def _create_generation_run(
+    db,
+    course_id: str,
+    user_id: str,
+    question_type: str,
+    requested_count: int,
+    hot_topics: List[str],
+    pattern_data: dict,
+) -> Optional[str]:
+    """Create generation cluster row. Returns run id if feature is available."""
+    run_id = str(uuid.uuid4())
+    minimal_payload = {
+        "id": run_id,
+        "course_id": course_id,
+        "user_id": user_id,
+        "question_type": question_type,
+        "requested_count": requested_count,
+        "generated_sets_count": 0,
+        "saved_rows_count": 0,
+        "failed_rows_count": 0,
+        "status": "running",
+        "source": "question_lab",
+        "hot_topics": hot_topics or [],
+        "pattern_snapshot": pattern_data or {},
+    }
+
+    extended_payload = dict(minimal_payload)
+    extended_payload.update(
+        {
+            "generation_label": None,
+            "is_archived": False,
+        }
+    )
+
+    try:
+        db.table("question_generation_runs").insert(extended_payload).execute()
+        return run_id
+    except Exception as e:
+        print(f"[generate_practice] generation run extended insert failed, retrying minimal payload: {e}")
+        try:
+            db.table("question_generation_runs").insert(minimal_payload).execute()
+            return run_id
+        except Exception as e2:
+            print(f"[generate_practice] generation run table unavailable, fallback to legacy save: {e2}")
+            return None
+
+
+def _finalize_generation_run(db, run_id: Optional[str], generated_sets_count: int, saved_rows_count: int, failed_rows_count: int):
+    if not run_id:
+        return
+    try:
+        label = f"Run {run_id[:8]}"
+        if generated_sets_count <= 0 or saved_rows_count <= 0:
+            status = "failed"
+        elif failed_rows_count > 0:
+            status = "partial"
+        else:
+            status = "completed"
+        patch = {
+            "generated_sets_count": generated_sets_count,
+            "saved_rows_count": saved_rows_count,
+            "failed_rows_count": failed_rows_count,
+            "status": status,
+        }
+        try:
+            db.table("question_generation_runs").update({**patch, "generation_label": label}).eq("id", run_id).execute()
+        except Exception:
+            db.table("question_generation_runs").update(patch).eq("id", run_id).execute()
+    except Exception as e:
+        print(f"[generate_practice] generation run finalize failed: {e}")
 
 
 @router.post("/summarize/{doc_id}")
@@ -440,19 +615,34 @@ async def generate_practice_questions(
     # Parse JSON response
     questions_list = []
     try:
-        clean = raw
-        if "```json" in clean:
-            clean = clean.split("```json")[1].split("```")[0]
-        elif "```" in clean:
-            clean = clean.split("```")[1].split("```")[0]
-        questions_list = json.loads(clean.strip())
+        questions_list = _parse_practice_json(raw)
     except Exception as e:
         print(f"[generate_practice] JSON parse error: {e}")
-        return {"questions": [], "raw": raw, "error": "Could not parse AI response"}
+        print(f"[generate_practice] raw output snippet: {(raw or '')[:300]}")
+        raise HTTPException(
+            status_code=502,
+            detail="AI returned an invalid format. Please retry with fewer questions or different type."
+        )
+
+    if not isinstance(questions_list, list) or len(questions_list) == 0:
+        raise HTTPException(
+            status_code=422,
+            detail=f"No {question_type} questions could be generated right now (likely quota/size issue). Please retry or choose another type."
+        )
 
     # Save to question_banks
     saved = []
     insert_failed_count = 0
+    generation_run_id = _create_generation_run(
+        db=db,
+        course_id=course_id,
+        user_id=user["id"],
+        question_type=question_type,
+        requested_count=count,
+        hot_topics=hot_topics,
+        pattern_data=pattern_data,
+    )
+
     for q in questions_list:
         parts = q.get("parts") or []
         if not isinstance(parts, list) or not parts:
@@ -468,13 +658,15 @@ async def generate_practice_questions(
                 "difficulty": "medium",
                 "question_text": f"({part.get('label', '')}) {part.get('question', '')}",
                 "answer_text": part.get("answer", ""),
-                "options": None,
+                "options": part.get("options") or None,
                 "source_page": None,
                 "is_prediction": True,
                 "source_type": "practice_generated",
                 "topic": q.get("topic", ""),
                 "probability": q.get("probability", "medium"),
                 "set_number": q.get("set_number"),
+                "generation_run_id": generation_run_id,
+                "part_label": part.get("label"),
                 "marks": part.get("marks"),
             }
 
@@ -486,7 +678,7 @@ async def generate_practice_questions(
                 "difficulty": "medium",
                 "question_text": full_row["question_text"],
                 "answer_text": full_row["answer_text"],
-                "options": None,
+                "options": part.get("options") or None,
                 "source_page": None,
                 "is_prediction": True,
             }
@@ -503,37 +695,319 @@ async def generate_practice_questions(
                     print(f"[generate_practice] DB insert error (legacy row): {fallback_error}")
                     insert_failed_count += 1
 
+    _finalize_generation_run(
+        db=db,
+        run_id=generation_run_id,
+        generated_sets_count=len(questions_list),
+        saved_rows_count=len(saved),
+        failed_rows_count=insert_failed_count,
+    )
+
     return {
         "questions": questions_list,
         "saved_count": len(saved),
         "insert_failed_count": insert_failed_count,
+        "generation_id": generation_run_id,
         "course_name": course_name,
     }
 
 
 @router.get("/practice-questions/{course_id}")
-async def list_practice_questions(course_id: str, user: dict = Depends(get_current_user)):
-    """List saved practice questions for a course (source_type = practice_generated)."""
+async def list_practice_questions(
+    course_id: str,
+    question_type: Optional[str] = Query(default=None),
+    generation_id: Optional[str] = Query(default=None),
+    include_all: bool = Query(default=False),
+    user: dict = Depends(get_current_user),
+):
+    """List saved practice questions for a course; defaults to latest generation cluster."""
     db = get_supabase_admin()
+
+    active_generation_id = generation_id
+    if not include_all and not active_generation_id:
+        try:
+            try:
+                runs_query = db.table("question_generation_runs") \
+                    .select("id") \
+                    .eq("course_id", course_id) \
+                    .eq("user_id", user["id"]) \
+                    .eq("is_archived", False) \
+                    .order("created_at", desc=True)
+                if question_type:
+                    runs_query = runs_query.eq("question_type", question_type)
+                run_ids = [r.get("id") for r in (runs_query.execute().data or []) if r.get("id")]
+            except Exception:
+                # Backward-compat: old schema without is_archived column.
+                runs_query = db.table("question_generation_runs") \
+                    .select("id") \
+                    .eq("course_id", course_id) \
+                    .eq("user_id", user["id"]) \
+                    .order("created_at", desc=True)
+                if question_type:
+                    runs_query = runs_query.eq("question_type", question_type)
+                run_ids = [r.get("id") for r in (runs_query.execute().data or []) if r.get("id")]
+
+            # Choose the newest run that actually has rows.
+            for run_id in run_ids:
+                check_query = db.table("question_banks") \
+                    .select("id") \
+                    .eq("course_id", course_id) \
+                    .eq("user_id", user["id"]) \
+                    .eq("source_type", "practice_generated") \
+                    .eq("generation_run_id", run_id) \
+                    .limit(1)
+                if question_type:
+                    check_query = check_query.eq("question_type", question_type)
+                check = check_query.execute()
+                if check.data:
+                    active_generation_id = run_id
+                    break
+        except Exception as e:
+            print(f"[practice_questions] run lookup fallback: {e}")
+
     try:
-        result = db.table("question_banks") \
+        query = db.table("question_banks") \
             .select("*") \
             .eq("course_id", course_id) \
             .eq("user_id", user["id"]) \
-            .eq("source_type", "practice_generated") \
-            .order("created_at", desc=False) \
-            .execute()
-        return _group_practice_rows(result.data or [])
+            .eq("source_type", "practice_generated")
+
+        if question_type:
+            query = query.eq("question_type", question_type)
+        if active_generation_id:
+            query = query.eq("generation_run_id", active_generation_id)
+
+        result = query.order("created_at", desc=False).execute()
+        rows = result.data or []
+
+        # If no linked-run rows found, fallback to legacy unlinked generated rows.
+        if not rows and not generation_id and not include_all:
+            legacy_query = db.table("question_banks") \
+                .select("*") \
+                .eq("course_id", course_id) \
+                .eq("user_id", user["id"])
+            if question_type:
+                legacy_query = legacy_query.eq("question_type", question_type)
+
+            legacy_rows_all = legacy_query.order("created_at", desc=False).execute().data or []
+            legacy_rows = [
+                r for r in legacy_rows_all
+                if not r.get("generation_run_id")
+                and (
+                    r.get("source_type") == "practice_generated"
+                    or bool(r.get("is_prediction"))
+                )
+            ]
+            if legacy_rows:
+                return _group_practice_rows(legacy_rows)
+
+        return _group_practice_rows(rows)
     except Exception:
         # source_type column may not exist yet; fall back to legacy marker.
         try:
-            legacy_result = db.table("question_banks") \
+            legacy_query = db.table("question_banks") \
                 .select("*") \
                 .eq("course_id", course_id) \
                 .eq("user_id", user["id"]) \
-                .eq("is_prediction", True) \
-                .order("created_at", desc=False) \
-                .execute()
+                .eq("is_prediction", True)
+            if question_type:
+                legacy_query = legacy_query.eq("question_type", question_type)
+
+            legacy_result = legacy_query.order("created_at", desc=False).execute()
             return _group_practice_rows(legacy_result.data or [])
         except Exception:
             return []
+
+
+@router.get("/practice-generations/{course_id}")
+async def list_practice_generations(
+    course_id: str,
+    question_type: Optional[str] = Query(default=None),
+    include_archived: bool = Query(default=False),
+    user: dict = Depends(get_current_user),
+):
+    """List generation clusters for practice questions in a course."""
+    db = get_supabase_admin()
+    try:
+        query = db.table("question_generation_runs") \
+            .select("id, question_type, generation_label, requested_count, generated_sets_count, saved_rows_count, failed_rows_count, status, is_archived, archived_at, created_at") \
+            .eq("course_id", course_id) \
+            .eq("user_id", user["id"]) \
+            .order("created_at", desc=True)
+        if question_type:
+            query = query.eq("question_type", question_type)
+        if not include_archived:
+            query = query.eq("is_archived", False)
+        result = query.execute()
+        return result.data or []
+    except Exception:
+        # Backward-compatible fallback for partially migrated schemas.
+        try:
+            base_query = db.table("question_generation_runs") \
+                .select("id, question_type, requested_count, generated_sets_count, saved_rows_count, failed_rows_count, status, created_at") \
+                .eq("course_id", course_id) \
+                .eq("user_id", user["id"]) \
+                .order("created_at", desc=True)
+            if question_type:
+                base_query = base_query.eq("question_type", question_type)
+            result = base_query.execute()
+            rows = result.data or []
+            for row in rows:
+                row.setdefault("generation_label", None)
+                row.setdefault("is_archived", False)
+                row.setdefault("archived_at", None)
+            return rows
+        except Exception:
+            return []
+
+
+@router.delete("/practice-questions/{course_id}/legacy")
+async def delete_legacy_practice_questions(
+    course_id: str,
+    question_type: Optional[str] = Query(default=None),
+    user: dict = Depends(get_current_user),
+):
+    """Delete legacy generated practice rows that are not linked to a generation run."""
+    db = get_supabase_admin()
+
+    try:
+        query = db.table("question_banks") \
+            .select("id, generation_run_id, source_type, is_prediction, question_type") \
+            .eq("course_id", course_id) \
+            .eq("user_id", user["id"])
+
+        if question_type:
+            query = query.eq("question_type", question_type)
+
+        result = query.execute()
+        rows = result.data or []
+
+        legacy_ids = []
+        for row in rows:
+            generation_run_id = row.get("generation_run_id")
+            source_type = row.get("source_type")
+            is_prediction = bool(row.get("is_prediction"))
+
+            # Legacy means it is not attached to any generation cluster.
+            if generation_run_id:
+                continue
+
+            # Keep this scoped to generated practice-like rows only.
+            if source_type == "practice_generated" or is_prediction:
+                legacy_ids.append(row.get("id"))
+
+        legacy_ids = [row_id for row_id in legacy_ids if row_id]
+        if not legacy_ids:
+            return {"deleted_count": 0}
+
+        chunk_size = 200
+        deleted_count = 0
+        for index in range(0, len(legacy_ids), chunk_size):
+            chunk = legacy_ids[index:index + chunk_size]
+            db.table("question_banks").delete().in_("id", chunk).execute()
+            deleted_count += len(chunk)
+
+        return {"deleted_count": deleted_count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete legacy practice questions: {e}")
+
+
+@router.patch("/practice-generations/{generation_id}")
+async def update_practice_generation(
+    generation_id: str,
+    generation_label: Optional[str] = Body(default=None),
+    is_archived: Optional[bool] = Body(default=None),
+    user: dict = Depends(get_current_user),
+):
+    """Rename/archive a generation cluster."""
+    db = get_supabase_admin()
+
+    patch = {}
+
+    if generation_label is not None:
+        label = str(generation_label).strip()
+        if len(label) == 0:
+            label = None
+        if label and len(label) > 120:
+            raise HTTPException(status_code=400, detail="Generation label must be 120 chars or less")
+        patch["generation_label"] = label
+
+    if is_archived is not None:
+        patch["is_archived"] = bool(is_archived)
+        patch["archived_at"] = datetime.now(timezone.utc).isoformat() if is_archived else None
+
+    if not patch:
+        raise HTTPException(status_code=400, detail="No update fields provided")
+
+    try:
+        result = db.table("question_generation_runs") \
+            .update(patch) \
+            .eq("id", generation_id) \
+            .eq("user_id", user["id"]) \
+            .execute()
+    except Exception as e:
+        # Backward-compatible retry when optional columns are missing.
+        retry_patch = dict(patch)
+        retry_patch.pop("generation_label", None)
+        retry_patch.pop("is_archived", None)
+        retry_patch.pop("archived_at", None)
+        if not retry_patch:
+            raise HTTPException(status_code=500, detail=f"Failed to update generation: {e}")
+        try:
+            result = db.table("question_generation_runs") \
+                .update(retry_patch) \
+                .eq("id", generation_id) \
+                .eq("user_id", user["id"]) \
+                .execute()
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"Failed to update generation: {e2}")
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Generation run not found")
+
+    return result.data[0]
+
+
+@router.delete("/practice-generations/{generation_id}")
+async def delete_practice_generation(
+    generation_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Permanently delete a generation run and every question_banks row linked to it.
+    Ownership is verified before any deletion occurs.
+    """
+    db = get_supabase_admin()
+
+    # Verify the run belongs to this user
+    run_check = (
+        db.table("question_generation_runs")
+        .select("id")
+        .eq("id", generation_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    if not run_check.data:
+        raise HTTPException(status_code=404, detail="Generation run not found")
+
+    # Delete all question_banks rows linked to this run
+    try:
+        db.table("question_banks") \
+            .delete() \
+            .eq("generation_run_id", generation_id) \
+            .eq("user_id", user["id"]) \
+            .execute()
+    except Exception as e:
+        print(f"[delete_generation] question_banks cleanup error: {e}")
+
+    # Delete the generation run record itself
+    try:
+        db.table("question_generation_runs") \
+            .delete() \
+            .eq("id", generation_id) \
+            .eq("user_id", user["id"]) \
+            .execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete generation run: {e}")
+
+    return {"deleted": True, "generation_id": generation_id}

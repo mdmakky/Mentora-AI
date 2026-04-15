@@ -1221,6 +1221,261 @@
   font-style: italic;
 }
 
+.ql-generation-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(520px, 100%);
+}
+
+.ql-generation-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ql-generation-select {
+  min-height: 36px;
+  border: 1px solid var(--surface-200);
+  border-radius: var(--radius-md);
+  background: white;
+  color: #334155;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+}
+
+.ql-generation-select:focus {
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px var(--brand-50);
+}
+
+.ql-generation-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.ql-delete-legacy-btn {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ql-legacy-actions {
+  margin-top: 6px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ql-backfill-btn {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ql-backfill-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.ql-delete-legacy-btn:hover {
+  background: #ffe4e6;
+  border-color: #fda4af;
+}
+
+.ql-run-history-panel {
+  margin-top: 14px;
+  border: 1px solid var(--surface-200);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.ql-run-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--surface-100);
+  background: #f8fafc;
+}
+
+.ql-run-history-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ql-run-history-toggle {
+  border: 1px solid var(--surface-200);
+  background: white;
+  color: #475569;
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ql-run-history-loading,
+.ql-run-history-empty {
+  padding: 12px;
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ql-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.ql-run-item {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  border: 1px solid var(--surface-200);
+  border-radius: var(--radius-md);
+  background: white;
+}
+
+.ql-run-item.active {
+  border-color: var(--brand-400);
+  box-shadow: 0 0 0 2px var(--brand-50);
+}
+
+.ql-run-item.archived {
+  opacity: 0.8;
+  background: #f8fafc;
+}
+
+.ql-run-main {
+  flex: 1;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 9px 10px;
+}
+
+.ql-run-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ql-run-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.ql-run-status {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: var(--radius-full);
+  padding: 2px 7px;
+  border: 1px solid transparent;
+}
+
+.ql-run-status.status-completed {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.ql-run-status.status-partial {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.ql-run-status.status-running {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.ql-run-meta {
+  margin-top: 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.ql-run-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+}
+
+.ql-run-action-btn {
+  border: 1px solid var(--surface-200);
+  background: white;
+  color: #64748b;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.ql-run-action-btn:hover {
+  border-color: var(--brand-300);
+  color: var(--brand-700);
+  background: var(--brand-50);
+}
+
+@media (max-width: 900px) {
+  .ql-generation-controls {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
 /* ===== Pattern Insights Panel ===== */
 .pattern-insights-panel {
   background: white;
@@ -1442,6 +1697,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 16px 20px;
   border-bottom: 1px solid var(--surface-100);
   background: linear-gradient(135deg, #f0fdf4, #f5f3ff);
@@ -1677,6 +1934,41 @@
 }
 
 .show-answer-btn:hover { background: var(--brand-50); }
+
+/* ===== MCQ Option Styles ===== */
+.mcq-part {
+  align-items: flex-start;
+}
+
+.mcq-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.mcq-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  color: #334155;
+  line-height: 1.45;
+  cursor: default;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.mcq-option--correct {
+  font-weight: 600;
+  color: #166534;
+  animation: fadeHighlight 0.3s ease;
+}
+
+@keyframes fadeHighlight {
+  from { opacity: 0.5; transform: translateX(-4px); }
+  to   { opacity: 1;   transform: translateX(0); }
+}
 
 /* Spin animation for loaders */
 .spin { animation: spin 1s linear infinite; }

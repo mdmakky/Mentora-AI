@@ -22,6 +22,10 @@ const useQuestionLabStore = create((set, get) => ({
   generateState: 'idle',  // 'idle' | 'loading' | 'done' | 'error'
   generateError: null,
   savedCount: 0,
+  generationRuns: [],
+  generationsLoading: false,
+  selectedGenerationId: null,
+  showArchivedGenerations: false,
 
   // How many past question papers are in this course
   paperCount: 0,
@@ -102,8 +106,17 @@ const useQuestionLabStore = create((set, get) => ({
       set({
         practiceQuestions: data.questions || [],
         savedCount: data.saved_count || 0,
+        selectedGenerationId: data.generation_id || null,
         generateState: 'done',
       });
+
+      // Refresh from DB using generation cluster so cross-browser state is consistent.
+      await get().loadPracticeGenerations(courseId, questionType);
+      await get().loadSavedPractice(courseId, {
+        questionType,
+        generationId: data.generation_id || null,
+      });
+
       return { success: true };
     } catch (err) {
       const msg = err.message || 'Generation failed';
@@ -112,18 +125,28 @@ const useQuestionLabStore = create((set, get) => ({
     }
   },
 
-  loadSavedPractice: async (courseId) => {
+  loadSavedPractice: async (courseId, { questionType = null, generationId = null, includeAll = false } = {}) => {
     try {
-      const data = await apiClient.get(`/ai/practice-questions/${courseId}`);
+      const params = new URLSearchParams();
+      if (questionType) params.set('question_type', questionType);
+      if (generationId) params.set('generation_id', generationId);
+      if (includeAll) params.set('include_all', 'true');
+
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const data = await apiClient.get(`/ai/practice-questions/${courseId}${suffix}`);
       const sets = Array.isArray(data) ? data : [];
       const savedCount = sets.reduce((sum, setItem) => {
         const partCount = Array.isArray(setItem?.parts) ? setItem.parts.length : 0;
         return sum + partCount;
       }, 0);
 
+      const inferredGenerationId = generationId
+        || (sets.length > 0 ? (sets[0]?.generation_id || sets[0]?.generation_run_id || null) : null);
+
       set({
         practiceQuestions: sets,
         savedCount,
+        selectedGenerationId: inferredGenerationId,
         generateState: sets.length ? 'done' : 'idle',
         generateError: null,
       });
@@ -132,6 +155,103 @@ const useQuestionLabStore = create((set, get) => ({
       const msg = err.message || 'Failed to load saved practice questions';
       set({ generateError: msg });
       return { success: false, error: msg };
+    }
+  },
+
+  loadPracticeGenerations: async (courseId, questionType = null, includeArchived = false) => {
+    set({ generationsLoading: true });
+    try {
+      const params = new URLSearchParams();
+      if (questionType) params.set('question_type', questionType);
+      if (includeArchived) params.set('include_archived', 'true');
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const data = await apiClient.get(`/ai/practice-generations/${courseId}${suffix}`);
+      const runsRaw = Array.isArray(data) ? data : [];
+      const runs = runsRaw.filter((r) => (r?.saved_rows_count || 0) > 0);
+      const preferredRunId =
+        runs.find((r) => (r?.saved_rows_count || 0) > 0)?.id
+        || runs[0]?.id
+        || null;
+
+      set((s) => ({
+        generationRuns: runs,
+        selectedGenerationId: s.selectedGenerationId || preferredRunId,
+        showArchivedGenerations: includeArchived,
+        generationsLoading: false,
+      }));
+      return { success: true, data: runs };
+    } catch (err) {
+      set({ generationRuns: [], generationsLoading: false });
+      return { success: false, error: err.message || 'Failed to load generation history' };
+    }
+  },
+
+  setSelectedGeneration: (generationId) => set({ selectedGenerationId: generationId || null }),
+
+  renameGeneration: async (generationId, label) => {
+    try {
+      const payload = { generation_label: label };
+      const data = await apiClient.patch(`/ai/practice-generations/${generationId}`, payload);
+      set((s) => ({
+        generationRuns: s.generationRuns.map((r) => (r.id === generationId ? { ...r, ...data } : r)),
+      }));
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to rename generation' };
+    }
+  },
+
+  archiveGeneration: async (generationId, isArchived = true) => {
+    try {
+      const payload = { is_archived: isArchived };
+      const data = await apiClient.patch(`/ai/practice-generations/${generationId}`, payload);
+      set((s) => ({
+        generationRuns: s.generationRuns.map((r) => (r.id === generationId ? { ...r, ...data } : r)),
+        selectedGenerationId: s.selectedGenerationId === generationId && isArchived ? null : s.selectedGenerationId,
+      }));
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to update generation archive state' };
+    }
+  },
+
+  deleteGeneration: async (generationId) => {
+    try {
+      await apiClient.delete(`/ai/practice-generations/${generationId}`);
+      set((s) => ({
+        generationRuns: s.generationRuns.filter((r) => r.id !== generationId),
+        // If the deleted run was active, reset questions display
+        selectedGenerationId: s.selectedGenerationId === generationId ? null : s.selectedGenerationId,
+        practiceQuestions: s.selectedGenerationId === generationId ? [] : s.practiceQuestions,
+        savedCount: s.selectedGenerationId === generationId ? 0 : s.savedCount,
+        generateState: s.selectedGenerationId === generationId ? 'idle' : s.generateState,
+      }));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to delete generation' };
+    }
+  },
+
+  backfillLegacyGenerations: async (courseId, questionType = null) => {
+    try {
+      const payload = { question_type: questionType || null };
+      const data = await apiClient.post(`/ai/practice-generations/${courseId}/backfill-legacy`, payload);
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to backfill legacy generations' };
+    }
+  },
+
+  deleteLegacyPractice: async (courseId, questionType = null) => {
+    try {
+      const suffix = questionType ? `?question_type=${encodeURIComponent(questionType)}` : '';
+      const data = await apiClient.delete(`/ai/practice-questions/${courseId}/legacy${suffix}`);
+
+      // Clear currently shown sets immediately; caller can reload runs/questions.
+      set({ practiceQuestions: [], savedCount: 0, selectedGenerationId: null, generateState: 'idle' });
+      return { success: true, deletedCount: data?.deleted_count || 0 };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to delete legacy practice questions' };
     }
   },
 
@@ -150,6 +270,10 @@ const useQuestionLabStore = create((set, get) => ({
     generateState: 'idle',
     generateError: null,
     savedCount: 0,
+    generationRuns: [],
+    generationsLoading: false,
+    selectedGenerationId: null,
+    showArchivedGenerations: false,
     paperCount: 0,
   }),
 }));

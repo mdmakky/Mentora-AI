@@ -18,14 +18,27 @@ def _parse_model_candidates(raw: str, default_csv: str) -> List[str]:
     return models or [m.strip() for m in default_csv.split(",") if m.strip()]
 
 
-CHAT_MODEL_CANDIDATES = _parse_model_candidates(
-    settings.GEMINI_CHAT_MODELS,
-    "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash",
+def _filter_supported_gemini_models(models: List[str]) -> List[str]:
+    """Drop deprecated/invalid model ids that still appear in old env values."""
+    blocked = {
+        "gemini-1.5-flash",
+    }
+    filtered = [m for m in models if m not in blocked]
+    return filtered or ["gemini-2.5-flash", "gemini-2.0-flash"]
+
+
+CHAT_MODEL_CANDIDATES = _filter_supported_gemini_models(
+    _parse_model_candidates(
+        settings.GEMINI_CHAT_MODELS,
+        "gemini-2.5-flash,gemini-2.0-flash",
+    )
 )
 
-TASK_MODEL_CANDIDATES = _parse_model_candidates(
-    settings.GEMINI_TASK_MODELS,
-    "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash",
+TASK_MODEL_CANDIDATES = _filter_supported_gemini_models(
+    _parse_model_candidates(
+        settings.GEMINI_TASK_MODELS,
+        "gemini-2.5-flash,gemini-2.0-flash",
+    )
 )
 
 
@@ -210,6 +223,7 @@ def _normalize_practice_sets(questions_list: list, pattern_data: dict, question_
                 "question": part.get("question") or part.get("question_text") or "",
                 "answer": part.get("answer", ""),
                 "marks": mark_value,
+                "options": part.get("options") or None,  # preserve MCQ options
             })
 
         normalized_sets.append({
@@ -227,6 +241,7 @@ def _generate_with_fallback(
     model_candidates: List[str],
     groq_model_candidates: Optional[List[str]] = None,
     system_prompt: Optional[str] = None,
+    groq_max_tokens: Optional[int] = None,
 ) -> str:
     """Generate with retries and multi-model failover to avoid single-point failure."""
     retries_per_model = max(1, settings.GEMINI_MAX_RETRIES_PER_MODEL)
@@ -267,6 +282,7 @@ def _generate_with_fallback(
                 prompt=prompt,
                 model_candidates=groq_model_candidates or GROQ_TASK_MODEL_CANDIDATES,
                 system_prompt=system_prompt,
+                max_tokens=max(256, min(int(groq_max_tokens), 4096)) if groq_max_tokens else 4096,
             )
         except Exception as groq_error:
             last_error = groq_error
@@ -387,76 +403,177 @@ async def generate_practice_from_analysis(
     high_prob = pattern_data.get("high_probability_topics", [])
     sample_format = pattern_data.get("sample_question_format", "")
 
-    repeat_topics_str = "\n".join(
-        f"  - {t['topic']}: appeared {t['frequency']} times (marks: {t.get('typical_marks', '?')})"
-        for t in repeat_topics[:20]
-    )
-    hot_topics_str = "\n".join(f"  - {t}" for t in hot_topics) if hot_topics else "  (none provided)"
+    def _is_payload_too_large_error(err: Exception) -> bool:
+        text = str(err).lower()
+        return (
+            "request too large" in text
+            or "413" in text
+            or "tokens per minute" in text
+            or ("requested" in text and "limit" in text)
+        )
 
-    type_instruction = {
-        "broad": "broad/essay-type questions with sub-parts (a, b, c) matching the real exam style",
-        "short": "short-answer questions (2-4 marks each)",
-        "mcq": "multiple-choice questions with 4 options (A, B, C, D) and mark the correct answer",
-    }.get(question_type, "broad/essay-type questions")
+    def _build_practice_prompt(
+        content_limit: int,
+        repeat_limit: int,
+        high_prob_limit: int,
+        hot_topics_limit: int,
+    ) -> str:
+        repeat_topics_str = "\n".join(
+            f"  - {t['topic']}: appeared {t['frequency']} times (marks: {t.get('typical_marks', '?')})"
+            for t in (repeat_topics or [])[:repeat_limit]
+        ) or "  (not yet analyzed — use course content topics)"
 
-    prompt = f"""You are an expert exam question generator for the course: "{course_name}".
+        hot_topics_str = (
+            "\n".join(f"  - {t}" for t in hot_topics[:hot_topics_limit])
+            if hot_topics else "  (none provided — rely on repeat topics and course content)"
+        )
 
-REAL EXAM FORMAT (from past paper analysis):
-- Total marks: {exam_format.get('total_marks', 72)}
-- Total question sets: {exam_format.get('total_sets', 8)}, answer any {exam_format.get('answer_required', 6)}
-- Time: {exam_format.get('time_hours', 3)} hours
-- Sub-question style: {exam_format.get('sub_question_style', 'a/b/c')}
-- Marks distribution: {exam_format.get('marks_distribution', 'varies')}
-- Sample format from real paper: {sample_format}
+        high_prob_str = ", ".join(high_prob[:high_prob_limit]) if high_prob else "refer to repeat topics above"
 
-REPEAT TOPICS (appeared in past papers — HIGH PRIORITY):
+        if question_type == "mcq":
+            return f"""You are a university MCQ exam question generator for the course: "{course_name}".
+
+PAST PAPER ANALYSIS:
+- Repeat topics (high-frequency in past exams):
 {repeat_topics_str}
-
-HOT TOPICS (emphasized by teacher — HIGH PRIORITY):
+- Teacher hot topics (HIGHEST priority — must include):
 {hot_topics_str}
+- High probability topics: {high_prob_str}
 
-HIGH PROBABILITY TOPICS: {', '.join(high_prob[:10]) if high_prob else 'see repeat topics'}
-
-COURSE CONTENT CONTEXT (for factual accuracy):
+COURSE CONTENT (use for accuracy of options and answers):
 ---
-{course_content[:8000]}
+{course_content[:content_limit]}
 ---
 
-TASK:
-Generate exactly {count} practice question SETS in {type_instruction}.
+TASK: Generate exactly {count} university-level MCQ questions.
 
-CRITICAL RULES:
-1. EXACTLY mirror the real exam format — use the same set structure, sub-parts, and marks notation
-2. Prioritize repeat topics and hot topics for question content
-3. Each set should have 2-3 sub-parts (a, b, c) with marks like the real paper
-4. Include a "probability" field: "high" (repeat + hot topic), "medium" (repeat OR hot), "low" (general)
-5. Include a "topic" field for each set
+STRICT REQUIREMENTS:
+1. Each question must be a standalone MCQ with EXACTLY 4 options (A, B, C, D)
+2. Questions test UNDERSTANDING — ask about applications, comparisons, mechanisms, formulas (NOT trivial recall)
+3. All 4 options must be academically plausible; only ONE is clearly correct
+4. Questions must match university final exam difficulty
+5. Cover REPEAT TOPICS and HOT TOPICS with highest priority
+6. "question" field: clear, specific question ending with "?"
+7. "options" field: array of exactly 4 strings [ "A. ...", "B. ...", "C. ...", "D. ..." ]
+8. "answer" field: FULL TEXT of the correct option (e.g. "B. The gradient descent algorithm")
+9. Each question is 1 mark; wrap it in a single-item "parts" array
 
-Return ONLY a JSON array — no markdown, no explanation:
+Return ONLY a raw JSON array with no markdown, no code block, no text before or after:
 [
   {{
     "set_number": 1,
     "probability": "high",
-    "topic": "main topic",
+    "topic": "specific topic name",
     "parts": [
       {{
-        "label": "a",
-        "question": "question text",
-        "marks": 3,
-        "type": "{question_type}"
-      }},
-      {{
-        "label": "b",
-        "question": "question text",
-        "marks": 5,
-        "type": "{question_type}"
+        "label": "Q1",
+        "question": "Which of the following best describes the role of a loss function in supervised learning?",
+        "options": ["A. It selects the model architecture", "B. It measures the difference between predictions and actual values", "C. It initializes the model weights", "D. It defines the number of training epochs"],
+        "answer": "B. It measures the difference between predictions and actual values",
+        "marks": 1
       }}
     ]
   }}
 ]"""
 
+        # broad / short
+        if question_type == "short":
+            verb_guide = (
+                "short-answer questions (2–5 marks each). "
+                "Use action verbs: Define, State, List, Differentiate, Briefly explain."
+            )
+            parts_guide = "1–2 sub-parts per set, 2–5 marks each. Keep answers concise (2–4 lines)."
+            marks_per_set = "5–8 marks per set"
+        else:  # broad
+            verb_guide = (
+                "broad/essay questions with 2–3 sub-parts (a, b, c) that mirror real exam style. "
+                "Use application verbs: Explain & Apply, Derive, Calculate, Compare & Contrast, "
+                "Illustrate with example, Design, Analyze, Justify, Discuss."
+            )
+            parts_guide = (
+                "2–3 sub-parts per set (a, b, c). Each sub-part must use a DIFFERENT action verb "
+                "and test a different depth (e.g., a=explain concept, b=apply to example, c=derive/compare)."
+            )
+            marks_per_set = f"{exam_format.get('marks_distribution', '~12 marks per set')}"
+
+        return f"""You are an expert university exam question generator for the course: "{course_name}".
+
+REAL EXAM FORMAT (from past paper analysis):
+- Total marks: {exam_format.get('total_marks', 72)}, Sets: {exam_format.get('total_sets', 8)}, Answer any: {exam_format.get('answer_required', 6)}
+- Time: {exam_format.get('time_hours', 3)} hours | Sub-part style: {exam_format.get('sub_question_style', 'a/b/c')}
+- Marks per set: {marks_per_set}
+- Sample questions from REAL past paper: {sample_format}
+
+REPEAT TOPICS from past papers (MUST appear — these are exam favorites):
+{repeat_topics_str}
+
+TEACHER HOT TOPICS (HIGHEST PRIORITY — emphasize these above all):
+{hot_topics_str}
+
+HIGH PROBABILITY TOPICS: {high_prob_str}
+
+COURSE CONTENT (for factual grounding and specific scenarios):
+---
+{course_content[:content_limit]}
+---
+
+TASK: Generate exactly {count} {verb_guide}
+
+CRITICAL QUALITY RULES (read carefully before generating):
+1. NEVER write generic "What is X?" or "Define X" as the only question — add application context
+2. Use SPECIFIC scenarios: "Consider a graph G with nodes...", "Given dataset with features X1, X2...", 
+   "A company needs to predict...", "Apply DFS/BFS on the following example..."
+3. Sub-parts MUST build progressively: (a) understand the concept → (b) apply to a scenario → (c) analyze/compare/derive
+4. Include computational/algorithmic steps where relevant (trace an algorithm, calculate values, draw a graph)
+5. {parts_guide}
+6. PRIORITY ORDER: hot topics > repeat topics > high probability topics > general course topics
+7. Include ALL hot topics if possible — these are emphasized by the teacher
+8. "answer" field: write a complete model answer (3–6 sentences or steps) that a student should reproduce
+9. "probability": "high" if topic is BOTH a repeat topic AND a hot topic, "medium" if repeat OR hot, "low" otherwise
+
+Return ONLY a raw JSON array with no markdown, no code block, no text before or after:
+[
+  {{
+    "set_number": 1,
+    "probability": "high",
+    "topic": "specific topic name from repeat/hot topics",
+    "parts": [
+      {{
+        "label": "a",
+        "question": "Explain [concept] and describe how it is applied in [specific context from course].",
+        "answer": "Model answer with key points a student must cover (3–6 sentences).",
+        "marks": 4
+      }},
+      {{
+        "label": "b",
+        "question": "Apply [algorithm/method] to the following example: [specific scenario]. Show each step.",
+        "answer": "Step-by-step model answer showing the working.",
+        "marks": 5
+      }},
+      {{
+        "label": "c",
+        "question": "Compare [X] and [Y] in terms of [specific criteria]. Which is more suitable for [scenario] and why?",
+        "answer": "Comparison with justification covering the criteria mentioned.",
+        "marks": 3
+      }}
+    ]
+  }}
+]"""
+        
+    prompt = _build_practice_prompt(
+        content_limit=8000,
+        repeat_limit=20,
+        high_prob_limit=10,
+        hot_topics_limit=20,
+    )
+
     try:
-        raw = _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES, groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES)
+        raw = _generate_with_fallback(
+            prompt,
+            TASK_MODEL_CANDIDATES,
+            groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES,
+            groq_max_tokens=4096,
+        )
         try:
             import json
             target_count = max(1, int(count or 10))
@@ -468,9 +585,41 @@ Return ONLY a JSON array — no markdown, no explanation:
             questions_list = json.loads(cleaned.strip())
             normalized = _normalize_practice_sets(questions_list, pattern_data, question_type)
             return json.dumps(normalized[:target_count])
-        except Exception:
+        except Exception as parse_err:
+            # Inner parse failed — log it and return raw so the router's
+            # _parse_practice_json can attempt its own multi-strategy parse.
+            print(f"[generate_practice_from_analysis] inner JSON parse failed: {parse_err}")
+            print(f"[generate_practice_from_analysis] raw output (first 500 chars): {raw[:500]}")
             return raw
     except Exception as e:
+        if _is_payload_too_large_error(e):
+            try:
+                compact_prompt = _build_practice_prompt(
+                    content_limit=2600,
+                    repeat_limit=10,
+                    high_prob_limit=6,
+                    hot_topics_limit=8,
+                )
+                raw = _generate_with_fallback(
+                    compact_prompt,
+                    TASK_MODEL_CANDIDATES,
+                    groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES,
+                    groq_max_tokens=4096,
+                )
+
+                import json
+                target_count = max(1, int(count or 10))
+                cleaned = raw
+                if "```json" in cleaned:
+                    cleaned = cleaned.split("```json")[1].split("```")[0]
+                elif "```" in cleaned:
+                    cleaned = cleaned.split("```")[1].split("```")[0]
+                questions_list = json.loads(cleaned.strip())
+                normalized = _normalize_practice_sets(questions_list, pattern_data, question_type)
+                return json.dumps(normalized[:target_count])
+            except Exception as e2:
+                print(f"Practice generation compact-retry error: {e2}")
+
         print(f"Practice generation error: {e}")
         return "[]"
 

@@ -19,12 +19,12 @@ def _parse_model_candidates(raw: str, default_csv: str) -> List[str]:
 
 GROQ_CHAT_MODEL_CANDIDATES = _parse_model_candidates(
     settings.GROQ_CHAT_MODELS,
-    "llama-3.1-70b-versatile,llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile,llama-3.1-8b-instant",
 )
 
 GROQ_TASK_MODEL_CANDIDATES = _parse_model_candidates(
     settings.GROQ_TASK_MODELS,
-    "llama-3.1-70b-versatile,llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile,llama-3.1-8b-instant",
 )
 
 GROQ_VISION_MODEL_CANDIDATES = _parse_model_candidates(

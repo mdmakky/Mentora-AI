@@ -27,15 +27,15 @@ class Settings(BaseSettings):
     # Google AI
     GOOGLE_API_KEY: str = "your-gemini-api-key"
     GOOGLE_CLIENT_ID: str = "your-google-client-id.apps.googleusercontent.com"
-    GEMINI_CHAT_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
-    GEMINI_TASK_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash,gemini-1.5-flash"
+    GEMINI_CHAT_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash"
+    GEMINI_TASK_MODELS: str = "gemini-2.5-flash,gemini-2.0-flash"
     GEMINI_MAX_RETRIES_PER_MODEL: int = 2
     GEMINI_RETRY_BASE_SECONDS: float = 2.0
 
     # Groq fallback
     GROQ_API_KEY: str = ""
-    GROQ_CHAT_MODELS: str = "llama-3.1-70b-versatile,llama-3.1-8b-instant"
-    GROQ_TASK_MODELS: str = "llama-3.1-70b-versatile,llama-3.1-8b-instant"
+    GROQ_CHAT_MODELS: str = "llama-3.3-70b-versatile,llama-3.1-8b-instant"
+    GROQ_TASK_MODELS: str = "llama-3.3-70b-versatile,llama-3.1-8b-instant"
     GROQ_VISION_MODELS: str = "meta-llama/llama-4-maverick-17b-128e-instruct,meta-llama/llama-4-scout-17b-16e-instruct"
     GROQ_MAX_RETRIES_PER_MODEL: int = 2
     GROQ_RETRY_BASE_SECONDS: float = 1.5
