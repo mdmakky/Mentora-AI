@@ -410,41 +410,63 @@ def merge_paper_analyses(paper_results: List[dict], course_name: str) -> dict:
     if not paper_results:
         return {}
 
-    if len(paper_results) == 1:
-        # Only one paper — return as-is with minimal wrapping
-        p = paper_results[0]
+    def _local_merge_fallback() -> dict:
+        """Deterministic merge fallback when model-based merge fails."""
+        p = paper_results[0] if paper_results else {}
         topics = []
-        for q in p.get("extracted_questions", []):
-            for part in q.get("parts", []):
-                t = part.get("topic", "")
-                if t:
+
+        for paper in paper_results:
+            paper_title = paper.get("paper_title", "Unknown")
+            for q in paper.get("extracted_questions", []):
+                for part in q.get("parts", []):
+                    t = part.get("topic", "")
+                    if not t:
+                        continue
                     existing = next((x for x in topics if x["topic"] == t), None)
                     if existing:
                         existing["frequency"] += 1
+                        if paper_title not in existing["years_appeared"]:
+                            existing["years_appeared"].append(paper_title)
                     else:
-                        topics.append({
-                            "topic": t,
-                            "frequency": 1,
-                            "years_appeared": [p.get("paper_title", "Year 1")],
-                            "typical_marks": part.get("marks", 0),
-                            "typical_type": part.get("type", "theoretical"),
-                        })
+                        topics.append(
+                            {
+                                "topic": t,
+                                "frequency": 1,
+                                "years_appeared": [paper_title],
+                                "typical_marks": part.get("marks", 0),
+                                "typical_type": part.get("type", "theoretical"),
+                            }
+                        )
+
+        topics.sort(key=lambda item: item.get("frequency", 0), reverse=True)
+
+        first_format = ""
+        for paper in paper_results:
+            fmt = str(paper.get("question_format") or "").strip()
+            if fmt:
+                first_format = fmt
+                break
+
         return {
             "course_name": course_name,
-            "papers_analyzed": 1,
+            "papers_analyzed": len(paper_results),
             "exam_format": {
                 "total_marks": p.get("total_marks", 72),
                 "total_sets": p.get("total_questions", 8),
                 "answer_required": p.get("answer_required", 6),
                 "time_hours": p.get("time_hours", 3.0),
                 "sub_question_style": "a/b/c",
-                "marks_distribution": p.get("question_format", ""),
+                "marks_distribution": first_format,
             },
             "repeat_topics": topics,
             "question_type_breakdown": {},
-            "high_probability_topics": [t["topic"] for t in topics[:5]],
-            "sample_question_format": p.get("question_format", ""),
+            "high_probability_topics": [t["topic"] for t in topics[:10]],
+            "sample_question_format": first_format,
+            "fallback_used": "local_merge",
         }
+
+    if len(paper_results) == 1:
+        return _local_merge_fallback()
 
     prompt = _build_merge_prompt(paper_results, course_name, ultra=False)
 
@@ -478,6 +500,6 @@ def merge_paper_analyses(paper_results: List[dict], course_name: str) -> dict:
                         return _normalize_merged_analysis(_try_parse_json(raw), paper_results, course_name)
                     except Exception as groq_error2:
                         print(f"[vision_service] merge_paper_analyses Groq ultra-compact retry failed: {groq_error2}")
-        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-             return {"error": "RATE_LIMIT_EXCEEDED"}
-        return {"course_name": course_name, "papers_analyzed": len(paper_results), "error": str(e)}
+
+        # Final fallback: never fail full analysis because merge model is rate-limited/parses badly.
+        return _local_merge_fallback()

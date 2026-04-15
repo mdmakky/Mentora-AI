@@ -114,28 +114,58 @@ def _extract_target_set_marks(pattern_data: dict, question_type: str) -> int:
     total_marks = exam_format.get("total_marks")
     answer_required = exam_format.get("answer_required")
 
-    try:
-        total_marks = int(total_marks)
-    except Exception:
-        total_marks = None
+    def _to_int(value):
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        text = str(value)
+        import re
+        match = re.search(r"(\d+)", text)
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except Exception:
+            return None
 
-    try:
-        answer_required = int(answer_required)
-    except Exception:
-        answer_required = None
+    total_marks = _to_int(total_marks)
+    answer_required = _to_int(answer_required)
 
     if question_type == "mcq":
         return 1
 
+    marks_distribution = exam_format.get("marks_distribution")
+    marks_distribution_text = str(marks_distribution or "")
+
+    import re
+
+    # Handles strings like "each set 12 marks" or "12 marks per question"
+    each_match = re.search(r"(\d+)\s*marks?\s*(each|per)", marks_distribution_text, re.IGNORECASE)
+    if each_match:
+        try:
+            return max(1, int(each_match.group(1)))
+        except Exception:
+            pass
+
     if total_marks and answer_required and answer_required > 0:
         return max(1, round(total_marks / answer_required))
 
+    # Try deriving from the first set's explicit sub-part marks from format text.
+    first_set_text = marks_distribution_text
+    if first_set_text:
+        split = re.split(r"\n\s*2[\.)]", first_set_text, maxsplit=1)
+        first_set_text = split[0] if split else first_set_text
+        marks = [int(m) for m in re.findall(r"\[(\d+)\]", first_set_text)]
+        if marks:
+            return max(1, sum(marks))
+
     sample_format = str(pattern_data.get("sample_question_format", "")) if isinstance(pattern_data, dict) else ""
-    import re
-    matches = re.findall(r"\[(\d+)\]", sample_format)
+    first_sample_set = re.split(r"\n\s*2[\.)]", sample_format, maxsplit=1)[0] if sample_format else ""
+    matches = re.findall(r"\[(\d+)\]", first_sample_set or sample_format)
     if matches:
         try:
-            return max(1, int(matches[0]))
+            return max(1, sum(int(m) for m in matches))
         except Exception:
             pass
 

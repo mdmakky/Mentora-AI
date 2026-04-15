@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from typing import List, Optional
 import json
+import re
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user
 from services.gemini_service import (
@@ -14,6 +15,61 @@ from services.vision_service import (
 )
 
 router = APIRouter(prefix="/ai", tags=["AI Features"])
+
+
+def _group_practice_rows(rows: List[dict]) -> List[dict]:
+    """Convert flattened question_banks rows into Question Lab set format."""
+    grouped = {}
+
+    for row in rows or []:
+        set_number = row.get("set_number") or 1
+        try:
+            set_number = int(set_number)
+        except Exception:
+            set_number = 1
+
+        key = (
+            set_number,
+            row.get("topic") or "",
+            row.get("probability") or "medium",
+        )
+
+        if key not in grouped:
+            grouped[key] = {
+                "set_number": set_number,
+                "probability": row.get("probability") or "medium",
+                "topic": row.get("topic") or "General",
+                "parts": [],
+            }
+
+        raw_text = (row.get("question_text") or "").strip()
+        label = None
+        question_text = raw_text
+        match = re.match(r"^\(([^)]+)\)\s*(.*)$", raw_text)
+        if match:
+            label = (match.group(1) or "").strip()
+            question_text = (match.group(2) or "").strip()
+
+        if not label:
+            label = chr(97 + len(grouped[key]["parts"]))
+
+        marks = row.get("marks")
+        try:
+            marks = int(marks) if marks is not None else None
+        except Exception:
+            marks = None
+
+        grouped[key]["parts"].append(
+            {
+                "label": label,
+                "question": question_text,
+                "answer": row.get("answer_text") or "",
+                "marks": marks,
+            }
+        )
+
+    ordered = sorted(grouped.values(), key=lambda item: item.get("set_number", 1))
+    return ordered
 
 
 @router.post("/summarize/{doc_id}")
@@ -214,6 +270,7 @@ async def analyze_past_papers(course_id: str, user: dict = Depends(get_current_u
     # Analyze each paper via vision
     paper_results = []
     paper_doc_ids = []
+    rate_limited_docs = 0
 
     for idx, doc in enumerate(docs):
         public_id = doc.get("cloudinary_public_id")
@@ -236,10 +293,8 @@ async def analyze_past_papers(course_id: str, user: dict = Depends(get_current_u
             )
             if analysis:
                 if analysis.get("error") == "RATE_LIMIT_EXCEEDED":
-                    raise HTTPException(
-                        status_code=429,
-                        detail="Google AI API quota exceeded. You have reached the free tier limits for your API key. Please wait a minute and try again."
-                    )
+                    rate_limited_docs += 1
+                    continue
                 analysis["_doc_name"] = doc["file_name"]
                 paper_results.append(analysis)
                 paper_doc_ids.append(doc["id"])
@@ -250,6 +305,11 @@ async def analyze_past_papers(course_id: str, user: dict = Depends(get_current_u
             continue
 
     if not paper_results:
+        if rate_limited_docs > 0:
+            raise HTTPException(
+                status_code=429,
+                detail="Google AI API quota exceeded. Please wait and try again, or configure fallback models."
+            )
         raise HTTPException(status_code=500, detail="Could not extract data from the question papers. Make sure they are valid PDF files.")
 
     # Merge all papers into a unified pattern summary
@@ -392,10 +452,15 @@ async def generate_practice_questions(
 
     # Save to question_banks
     saved = []
+    insert_failed_count = 0
     for q in questions_list:
+        parts = q.get("parts") or []
+        if not isinstance(parts, list) or not parts:
+            parts = [{"label": "a", "question": q.get("question", ""), "answer": "", "marks": None}]
+
         # Flatten parts into individual question_banks rows
-        for part in q.get("parts", []):
-            row = {
+        for part in parts:
+            full_row = {
                 "course_id": course_id,
                 "user_id": user["id"],
                 "document_id": None,
@@ -405,22 +470,43 @@ async def generate_practice_questions(
                 "answer_text": part.get("answer", ""),
                 "options": None,
                 "source_page": None,
+                "is_prediction": True,
                 "source_type": "practice_generated",
                 "topic": q.get("topic", ""),
                 "probability": q.get("probability", "medium"),
                 "set_number": q.get("set_number"),
                 "marks": part.get("marks"),
             }
+
+            legacy_row = {
+                "course_id": course_id,
+                "user_id": user["id"],
+                "document_id": None,
+                "question_type": question_type,
+                "difficulty": "medium",
+                "question_text": full_row["question_text"],
+                "answer_text": full_row["answer_text"],
+                "options": None,
+                "source_page": None,
+                "is_prediction": True,
+            }
+
             try:
-                res = db.table("question_banks").insert(row).execute()
-                saved.append(res.data[0] if res.data else row)
+                res = db.table("question_banks").insert(full_row).execute()
+                saved.append(res.data[0] if res.data else full_row)
             except Exception as e:
-                print(f"[generate_practice] DB insert error: {e}")
-                saved.append(row)
+                print(f"[generate_practice] DB insert error (extended row): {e}")
+                try:
+                    res = db.table("question_banks").insert(legacy_row).execute()
+                    saved.append(res.data[0] if res.data else legacy_row)
+                except Exception as fallback_error:
+                    print(f"[generate_practice] DB insert error (legacy row): {fallback_error}")
+                    insert_failed_count += 1
 
     return {
         "questions": questions_list,
         "saved_count": len(saved),
+        "insert_failed_count": insert_failed_count,
         "course_name": course_name,
     }
 
@@ -435,9 +521,19 @@ async def list_practice_questions(course_id: str, user: dict = Depends(get_curre
             .eq("course_id", course_id) \
             .eq("user_id", user["id"]) \
             .eq("source_type", "practice_generated") \
-            .order("created_at", desc=True) \
+            .order("created_at", desc=False) \
             .execute()
-        return result.data or []
+        return _group_practice_rows(result.data or [])
     except Exception:
-        # source_type column may not exist yet — return empty
-        return []
+        # source_type column may not exist yet; fall back to legacy marker.
+        try:
+            legacy_result = db.table("question_banks") \
+                .select("*") \
+                .eq("course_id", course_id) \
+                .eq("user_id", user["id"]) \
+                .eq("is_prediction", True) \
+                .order("created_at", desc=False) \
+                .execute()
+            return _group_practice_rows(legacy_result.data or [])
+        except Exception:
+            return []

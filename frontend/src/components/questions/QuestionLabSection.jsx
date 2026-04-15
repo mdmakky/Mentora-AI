@@ -72,7 +72,7 @@ const QuestionLabSection = ({ courseId, course }) => {
     practiceQuestions, generateState, generateError, savedCount,
     paperCount,
     fetchHotTopics, addHotTopic, deleteHotTopic,
-    loadCachedAnalysis, analyzePapers, generatePractice,
+    loadCachedAnalysis, analyzePapers, generatePractice, loadSavedPractice,
     setPaperCount, resetSession,
   } = useQuestionLabStore();
 
@@ -80,20 +80,9 @@ const QuestionLabSection = ({ courseId, course }) => {
 
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const questionPapers = useMemo(
-    () => {
-      const filtered = safeDocuments.filter(
-        (d) => d.doc_category === 'question_paper' && !d.is_deleted && (!courseId || d.course_id === courseId)
-      );
-      if (courseId && (safeDocuments.length > 0 || filtered.length > 0)) {
-        console.log(`[QuestionLab] Documents loaded for ${courseId}:`, {
-          totalDocs: safeDocuments.length,
-          filteredQuestionPapers: filtered.length,
-          allQuestionPapers: safeDocuments.filter(d => d.doc_category === 'question_paper').length,
-          docs: filtered.map(d => ({ name: d.file_name, course: d.course_id, deleted: d.is_deleted }))
-        });
-      }
-      return filtered;
-    },
+    () => safeDocuments.filter(
+      (d) => d.doc_category === 'question_paper' && !d.is_deleted && (!courseId || d.course_id === courseId)
+    ),
     [safeDocuments, courseId]
   );
 
@@ -117,8 +106,9 @@ const QuestionLabSection = ({ courseId, course }) => {
       })();
       fetchHotTopics(courseId);
       loadCachedAnalysis(courseId);
+      loadSavedPractice(courseId);
     }
-  }, [courseId, fetchDocuments, fetchHotTopics, loadCachedAnalysis, resetSession]);
+  }, [courseId, fetchDocuments, fetchHotTopics, loadCachedAnalysis, loadSavedPractice, resetSession]);
 
   const hasPapers = questionPapers.length > 0;
   const hasAnalysis = analyzeState === 'done' && patternData;

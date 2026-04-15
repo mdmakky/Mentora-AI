@@ -12,6 +12,17 @@ const PROB_CONFIG = {
   low:    { label: 'General',           color: '#059669', bg: '#f0fdf4', border: '#bbf7d0', icon: Minus },
 };
 
+const cleanMathText = (value) => {
+  const text = String(value || '');
+  return text
+    .replace(/\\\$/g, '$')
+    .replace(/\\\(/g, '(')
+    .replace(/\\\)/g, ')')
+    .replace(/\\\[/g, '[')
+    .replace(/\\\]/g, ']')
+    .replace(/\\\\/g, '\\');
+};
+
 const QuestionCard = ({ questionSet, index }) => {
   const [showAnswers, setShowAnswers] = useState(false);
 
@@ -49,11 +60,11 @@ const QuestionCard = ({ questionSet, index }) => {
           <div key={pi} className="question-part">
             <div className="part-label">{part.label || String.fromCharCode(97 + pi)})</div>
             <div className="part-body">
-              <p className="part-question">{part.question}</p>
+              <p className="part-question">{cleanMathText(part.question)}</p>
               {showAnswers && part.answer && (
                 <div className="part-answer">
                   <span className="answer-label">Answer:</span>
-                  <p>{part.answer}</p>
+                  <p>{cleanMathText(part.answer)}</p>
                 </div>
               )}
             </div>

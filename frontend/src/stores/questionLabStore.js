@@ -112,6 +112,29 @@ const useQuestionLabStore = create((set, get) => ({
     }
   },
 
+  loadSavedPractice: async (courseId) => {
+    try {
+      const data = await apiClient.get(`/ai/practice-questions/${courseId}`);
+      const sets = Array.isArray(data) ? data : [];
+      const savedCount = sets.reduce((sum, setItem) => {
+        const partCount = Array.isArray(setItem?.parts) ? setItem.parts.length : 0;
+        return sum + partCount;
+      }, 0);
+
+      set({
+        practiceQuestions: sets,
+        savedCount,
+        generateState: sets.length ? 'done' : 'idle',
+        generateError: null,
+      });
+      return { success: true };
+    } catch (err) {
+      const msg = err.message || 'Failed to load saved practice questions';
+      set({ generateError: msg });
+      return { success: false, error: msg };
+    }
+  },
+
   // ─── Paper count helper ───────────────────────────
   setPaperCount: (n) => set({ paperCount: n }),
 
