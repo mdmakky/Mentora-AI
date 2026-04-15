@@ -9,13 +9,31 @@ import Modal from './ui/Modal';
 import Spinner from './ui/Spinner';
 import EmptyState from './ui/EmptyState';
 
+const SEMESTER_TERMS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+
+const extractSemesterNumber = (semester) => {
+  const text = `${semester?.term || ''} ${semester?.name || ''}`.toLowerCase();
+  const match = text.match(/\b([1-8])(?:st|nd|rd|th)?\b/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value >= 1 && value <= 8 ? value : null;
+};
+
 const Dashboard = () => {
   const user = useAuthStore((s) => s.user);
   const { semesters, loading, fetchSemesters } = useCourseStore();
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: `1st Semester ${new Date().getFullYear()}`, year: new Date().getFullYear(), term: '1st', is_current: true });
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
   const createSemester = useCourseStore((s) => s.createSemester);
+
+  const usedSemesterNumbers = new Set(
+    (semesters || [])
+      .map((s) => extractSemesterNumber(s))
+      .filter((n) => Number.isFinite(n))
+  );
+  const availableTerms = SEMESTER_TERMS.filter((term, index) => !usedSemesterNumbers.has(index + 1));
 
   // Dashboard stats
   const [stats, setStats] = useState({
@@ -43,11 +61,33 @@ const Dashboard = () => {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    setCreateError('');
+
+    if (!availableTerms.includes(form.term)) {
+      setCreateError('This semester already exists. Please choose another semester number.');
+      return;
+    }
+    if (availableTerms.length === 0) {
+      setCreateError('You already have all 8 semesters.');
+      return;
+    }
+
     setCreating(true);
-    await createSemester({ ...form, year: parseInt(form.year) });
+    const result = await createSemester({ ...form, year: parseInt(form.year, 10) });
     setCreating(false);
+    if (!result.success) {
+      setCreateError(result.error || 'Failed to create semester');
+      return;
+    }
+
     setShowCreate(false);
-    setForm({ name: '', year: new Date().getFullYear(), term: 'Spring', is_current: true });
+    const nextTerm = availableTerms[0] || '1st';
+    setForm({
+      name: `${nextTerm} Semester ${new Date().getFullYear()}`,
+      year: new Date().getFullYear(),
+      term: nextTerm,
+      is_current: true,
+    });
   };
 
   const greeting = () => {
@@ -105,7 +145,19 @@ const Dashboard = () => {
       {/* Semesters header */}
       <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3 mb-4 sm:mb-5">
         <h2 className="text-lg sm:text-xl font-bold text-slate-900">My Semesters</h2>
-        <Button size="sm" onClick={() => setShowCreate(true)}>
+        <Button
+          size="sm"
+          onClick={() => {
+            const nextTerm = availableTerms[0] || '1st';
+            setCreateError('');
+            setForm((prev) => ({
+              ...prev,
+              term: nextTerm,
+              name: `${nextTerm} Semester ${prev.year}`,
+            }));
+            setShowCreate(true);
+          }}
+        >
           <Plus size={16} /> Add Semester
         </Button>
       </div>
@@ -130,7 +182,16 @@ const Dashboard = () => {
           title="No semesters yet"
           description="Create your first semester to start organizing your courses and study materials."
           action={
-            <Button onClick={() => setShowCreate(true)}>
+              <Button onClick={() => {
+                const nextTerm = availableTerms[0] || '1st';
+                setCreateError('');
+                setForm((prev) => ({
+                  ...prev,
+                  term: nextTerm,
+                  name: `${nextTerm} Semester ${prev.year}`,
+                }));
+                setShowCreate(true);
+              }}>
               <Plus size={16} /> Create Semester
             </Button>
           }
@@ -147,6 +208,9 @@ const Dashboard = () => {
 
       {/* Create Semester Modal */}
       <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Create Semester">
+        {availableTerms.length === 0 ? (
+          <div className="text-sm text-slate-600">All 8 semesters are already created.</div>
+        ) : (
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -159,14 +223,9 @@ const Dashboard = () => {
                 }}
                 className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition bg-white"
               >
-                <option value="1st">1st</option>
-                <option value="2nd">2nd</option>
-                <option value="3rd">3rd</option>
-                <option value="4th">4th</option>
-                <option value="5th">5th</option>
-                <option value="6th">6th</option>
-                <option value="7th">7th</option>
-                <option value="8th">8th</option>
+                {availableTerms.map((term) => (
+                  <option key={term} value={term}>{term}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -203,6 +262,7 @@ const Dashboard = () => {
             />
             Set as current semester
           </label>
+          {createError && <p className="text-sm text-rose-600">{createError}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowCreate(false)}>
               Cancel
@@ -212,6 +272,7 @@ const Dashboard = () => {
             </Button>
           </div>
         </form>
+        )}
       </Modal>
     </div>
   );

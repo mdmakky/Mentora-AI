@@ -43,11 +43,19 @@ const dedupeCourses = (items = []) => {
   return Array.from(map.values());
 };
 
+const extractSemesterNumber = (semester) => {
+  const text = `${semester?.term || ''} ${semester?.name || ''}`.toLowerCase();
+  const match = text.match(/\b([1-8])(?:st|nd|rd|th)?\b/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value >= 1 && value <= 8 ? value : Number.MAX_SAFE_INTEGER;
+};
+
 const sortSemesters = (items = []) => {
   return [...items].sort((a, b) => {
-    if (Boolean(a?.is_current) !== Boolean(b?.is_current)) {
-      return a?.is_current ? -1 : 1;
-    }
+    const aNumber = extractSemesterNumber(a);
+    const bNumber = extractSemesterNumber(b);
+    if (aNumber !== bNumber) return aNumber - bNumber;
 
     const aSort = Number.isFinite(a?.sort_order) ? a.sort_order : Number.MAX_SAFE_INTEGER;
     const bSort = Number.isFinite(b?.sort_order) ? b.sort_order : Number.MAX_SAFE_INTEGER;
@@ -157,6 +165,28 @@ const useCourseStore = create(
       return await apiClient.get(`/courses/${courseId}`);
     } catch (err) {
       return null;
+    }
+  },
+
+  updateCourse: async (courseId, payload, semesterId) => {
+    try {
+      const data = await apiClient.put(`/courses/${courseId}`, payload);
+      set((s) => {
+        const existing = s.courses[semesterId] || [];
+        return {
+          courses: {
+            ...s.courses,
+            [semesterId]: sortCourses(
+              dedupeCourses(
+                existing.map((c) => (c.id === courseId ? { ...c, ...data } : c))
+              )
+            ),
+          },
+        };
+      });
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to update course' };
     }
   },
 
