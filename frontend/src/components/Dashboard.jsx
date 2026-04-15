@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Plus, FileText, MessagesSquare, TrendingUp, BookOpen } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import useCourseStore from '../stores/courseStore';
@@ -45,9 +45,7 @@ const Dashboard = () => {
   const [loadingStats, setLoadingStats] = useState(true);
   const [statsError, setStatsError] = useState(false);
 
-  useEffect(() => {
-    fetchSemesters();
-    // Fetch dashboard stats
+  const loadStats = useCallback(() => {
     setLoadingStats(true);
     setStatsError(false);
     apiClient.get('/dashboard/stats').then((data) => {
@@ -57,7 +55,12 @@ const Dashboard = () => {
       setStatsError(true);
       setLoadingStats(false);
     });
-  }, [fetchSemesters]);
+  }, []);
+
+  useEffect(() => {
+    fetchSemesters();
+    loadStats();
+  }, [fetchSemesters, loadStats]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -79,6 +82,7 @@ const Dashboard = () => {
       setCreateError(result.error || 'Failed to create semester');
       return;
     }
+    loadStats();
 
     setShowCreate(false);
     const nextTerm = availableTerms[0] || '1st';
@@ -200,7 +204,7 @@ const Dashboard = () => {
         <div className="space-y-6">
           {semesters.map((sem, i) => (
             <div key={sem.id} className="animate-slide-up" style={{ animationDelay: `${i * 80}ms` }}>
-              <SemesterSection semester={sem} />
+                <SemesterSection semester={sem} onDataChanged={loadStats} />
             </div>
           ))}
         </div>

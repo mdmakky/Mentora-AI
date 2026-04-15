@@ -21,6 +21,11 @@ def _extract_semester_number(term: str, name: str) -> int | None:
     return value if 1 <= value <= 8 else None
 
 
+def _ordinal_term(number: int) -> str:
+    suffix = {1: "st", 2: "nd", 3: "rd"}.get(number, "th")
+    return f"{number}{suffix}"
+
+
 @router.get("/semesters", response_model=List[SemesterResponse])
 async def list_semesters(user: dict = Depends(get_current_user)):
     """Get all semesters for the current user."""
@@ -37,6 +42,7 @@ async def create_semester(data: SemesterCreate, user: dict = Depends(get_current
     incoming_num = _extract_semester_number(data.term, data.name)
     if incoming_num is None:
         raise HTTPException(status_code=400, detail="Semester must be a number from 1st to 8th")
+    canonical_term = _ordinal_term(incoming_num)
 
     existing = db.table("semesters").select("id, term, name").eq("user_id", user["id"]).execute()
     existing_rows = existing.data or []
@@ -61,7 +67,7 @@ async def create_semester(data: SemesterCreate, user: dict = Depends(get_current
         "user_id": user["id"],
         "name": data.name,
         "year": data.year,
-        "term": data.term,
+        "term": canonical_term,
         "is_current": data.is_current,
     }).execute()
 
@@ -84,6 +90,7 @@ async def update_semester(semester_id: str, data: SemesterUpdate, user: dict = D
         next_num = _extract_semester_number(next_term, next_name)
         if next_num is None:
             raise HTTPException(status_code=400, detail="Semester must be a number from 1st to 8th")
+        update_data["term"] = _ordinal_term(next_num)
 
         others = db.table("semesters").select("id, term, name").eq("user_id", user["id"]).neq("id", semester_id).execute()
         other_nums = {

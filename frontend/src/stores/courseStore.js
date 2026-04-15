@@ -116,6 +116,20 @@ const useCourseStore = create(
     }
   },
 
+  updateSemester: async (semesterId, payload) => {
+    try {
+      const data = await apiClient.put(`/semesters/${semesterId}`, payload);
+      set((s) => ({
+        semesters: sortSemesters(
+          dedupeById(s.semesters.map((sem) => (sem.id === semesterId ? { ...sem, ...data } : sem)))
+        ),
+      }));
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to update semester' };
+    }
+  },
+
   deleteSemester: async (id) => {
     try {
       await apiClient.delete(`/semesters/${id}`);

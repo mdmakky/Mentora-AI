@@ -5,7 +5,7 @@ import useCourseStore from '../../stores/courseStore';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
-const CourseCard = ({ course }) => {
+const CourseCard = ({ course, onUpdated }) => {
   const navigate = useNavigate();
   const updateCourse = useCourseStore((s) => s.updateCourse);
   const [showEdit, setShowEdit] = useState(false);
@@ -40,6 +40,7 @@ const CourseCard = ({ course }) => {
       return;
     }
     setShowEdit(false);
+    onUpdated?.();
   };
 
   return (

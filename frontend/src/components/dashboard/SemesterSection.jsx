@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Trash2, Star } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Trash2, Star, Pencil } from 'lucide-react';
 import useCourseStore from '../../stores/courseStore';
 import CourseCard from './CourseCard';
 import Button from '../ui/Button';
@@ -8,11 +8,24 @@ import ConfirmDialog from '../ui/ConfirmDialog';
 
 const COLORS = ['#2563EB', '#059669', '#7C3AED', '#DC2626', '#D97706', '#0891B2', '#E11D48', '#4F46E5'];
 
-const SemesterSection = ({ semester }) => {
+const SEMESTER_TERMS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'];
+
+const extractSemesterNumber = (semester) => {
+  const text = `${semester?.term || ''} ${semester?.name || ''}`.toLowerCase();
+  const match = text.match(/\b([1-8])(?:st|nd|rd|th)?\b/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value >= 1 && value <= 8 ? value : null;
+};
+
+const SemesterSection = ({ semester, onDataChanged }) => {
   const [open, setOpen] = useState(semester.is_current);
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEditSemester, setShowEditSemester] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [savingSemester, setSavingSemester] = useState(false);
+  const [semesterError, setSemesterError] = useState('');
   const [form, setForm] = useState({
     course_code: '',
     course_name: '',
@@ -20,9 +33,32 @@ const SemesterSection = ({ semester }) => {
     credit_hours: 3,
     color: COLORS[0],
   });
+  const [semesterForm, setSemesterForm] = useState({
+    name: semester.name || '',
+    year: semester.year || new Date().getFullYear(),
+    term: semester.term || '1st',
+    is_current: Boolean(semester.is_current),
+  });
 
-  const { courses, fetchCourses, createCourse, deleteSemester } = useCourseStore();
+  const { courses, semesters, fetchCourses, createCourse, deleteSemester, updateSemester } = useCourseStore();
   const semCourses = courses[semester.id] || [];
+
+  const usedSemesterNumbers = new Set(
+    (semesters || [])
+      .filter((s) => s.id !== semester.id)
+      .map((s) => extractSemesterNumber(s))
+      .filter((n) => Number.isFinite(n))
+  );
+  const availableTerms = SEMESTER_TERMS.filter((term, index) => !usedSemesterNumbers.has(index + 1));
+
+  useEffect(() => {
+    setSemesterForm({
+      name: semester.name || '',
+      year: semester.year || new Date().getFullYear(),
+      term: semester.term || '1st',
+      is_current: Boolean(semester.is_current),
+    });
+  }, [semester.id, semester.name, semester.term, semester.year, semester.is_current]);
 
   useEffect(() => {
     if (open) {
@@ -33,14 +69,42 @@ const SemesterSection = ({ semester }) => {
   const handleAddCourse = async (e) => {
     e.preventDefault();
     setCreating(true);
-    await createCourse({
+    const result = await createCourse({
       semester_id: semester.id,
       ...form,
       credit_hours: parseFloat(form.credit_hours),
     });
     setCreating(false);
+    if (!result.success) return;
     setShowAdd(false);
     setForm({ course_code: '', course_name: '', instructor: '', credit_hours: 3, color: COLORS[0] });
+    onDataChanged?.();
+  };
+
+  const handleSaveSemester = async (e) => {
+    e.preventDefault();
+    setSemesterError('');
+    if (!availableTerms.includes(semesterForm.term) && semesterForm.term !== semester.term) {
+      setSemesterError('This semester number already exists.');
+      return;
+    }
+
+    setSavingSemester(true);
+    const result = await updateSemester(semester.id, {
+      name: semesterForm.name.trim(),
+      year: parseInt(semesterForm.year, 10),
+      term: semesterForm.term,
+      is_current: semesterForm.is_current,
+    });
+    setSavingSemester(false);
+
+    if (!result.success) {
+      setSemesterError(result.error || 'Failed to update semester');
+      return;
+    }
+
+    setShowEditSemester(false);
+    onDataChanged?.();
   };
 
   return (
@@ -77,6 +141,16 @@ const SemesterSection = ({ semester }) => {
             <span className="hidden min-[390px]:inline">Add Course</span>
           </Button>
           <button
+            onClick={() => {
+              setSemesterError('');
+              setShowEditSemester(true);
+            }}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition"
+            title="Edit semester"
+          >
+            <Pencil size={15} />
+          </button>
+          <button
             onClick={() => setShowDeleteConfirm(true)}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
           >
@@ -95,7 +169,7 @@ const SemesterSection = ({ semester }) => {
           ) : (
             <div className="grid grid-cols-1 min-[420px]:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 pt-4">
               {semCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
+                  <CourseCard key={course.id} course={course} onUpdated={onDataChanged} />
               ))}
             </div>
           )}
@@ -182,13 +256,85 @@ const SemesterSection = ({ semester }) => {
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => {
-          void deleteSemester(semester.id);
+          void (async () => {
+            const result = await deleteSemester(semester.id);
+            if (result.success) onDataChanged?.();
+          })();
         }}
         title="Delete Semester"
         message={`Delete "${semester.name}" and all courses inside it? This cannot be undone.`}
         confirmLabel="Delete Semester"
         confirmVariant="danger"
       />
+
+      <Modal isOpen={showEditSemester} onClose={() => setShowEditSemester(false)} title="Edit Semester">
+        <form onSubmit={handleSaveSemester} className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Semester</label>
+              <select
+                value={semesterForm.term}
+                onChange={(e) => {
+                  const term = e.target.value;
+                  setSemesterForm((prev) => ({ ...prev, term, name: `${term} Semester ${prev.year}` }));
+                }}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition bg-white"
+              >
+                {[semester.term, ...availableTerms]
+                  .filter((value, index, arr) => arr.indexOf(value) === index)
+                  .map((term) => (
+                    <option key={term} value={term}>{term}</option>
+                  ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Year</label>
+              <input
+                type="number"
+                required
+                value={semesterForm.year}
+                onChange={(e) => {
+                  const year = e.target.value;
+                  setSemesterForm((prev) => ({ ...prev, year, name: `${prev.term} Semester ${year}` }));
+                }}
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Semester Name</label>
+            <input
+              type="text"
+              required
+              value={semesterForm.name}
+              onChange={(e) => setSemesterForm((prev) => ({ ...prev, name: e.target.value }))}
+              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={semesterForm.is_current}
+              onChange={(e) => setSemesterForm((prev) => ({ ...prev, is_current: e.target.checked }))}
+              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Set as current semester
+          </label>
+
+          {semesterError && <p className="text-sm text-rose-600">{semesterError}</p>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" size="sm" type="button" onClick={() => setShowEditSemester(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" loading={savingSemester}>
+              Save Semester
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
