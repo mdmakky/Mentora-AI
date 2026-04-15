@@ -109,6 +109,89 @@ def _is_retryable_error(error: Exception) -> bool:
     return any(token in msg for token in retry_tokens)
 
 
+def _extract_target_set_marks(pattern_data: dict, question_type: str) -> int:
+    exam_format = pattern_data.get("exam_format", {}) if isinstance(pattern_data, dict) else {}
+    total_marks = exam_format.get("total_marks")
+    answer_required = exam_format.get("answer_required")
+
+    try:
+        total_marks = int(total_marks)
+    except Exception:
+        total_marks = None
+
+    try:
+        answer_required = int(answer_required)
+    except Exception:
+        answer_required = None
+
+    if question_type == "mcq":
+        return 1
+
+    if total_marks and answer_required and answer_required > 0:
+        return max(1, round(total_marks / answer_required))
+
+    sample_format = str(pattern_data.get("sample_question_format", "")) if isinstance(pattern_data, dict) else ""
+    import re
+    matches = re.findall(r"\[(\d+)\]", sample_format)
+    if matches:
+        try:
+            return max(1, int(matches[0]))
+        except Exception:
+            pass
+
+    return 10 if question_type == "short" else 15
+
+
+def _normalize_practice_sets(questions_list: list, pattern_data: dict, question_type: str) -> list:
+    if not isinstance(questions_list, list):
+        return []
+
+    target_set_marks = _extract_target_set_marks(pattern_data, question_type)
+    normalized_sets = []
+
+    for index, item in enumerate(questions_list, start=1):
+        if not isinstance(item, dict):
+            continue
+
+        parts = item.get("parts") or []
+        if not isinstance(parts, list) or not parts:
+            parts = [{"label": "a", "question": str(item.get("question", item.get("question_text", ""))), "marks": target_set_marks}]
+
+        weights = []
+        for part in parts:
+            try:
+                weights.append(max(1, int(part.get("marks") or 1)))
+            except Exception:
+                weights.append(1)
+
+        weight_total = sum(weights) or len(parts) or 1
+        allocated = []
+        remaining = target_set_marks
+
+        for part_index, part in enumerate(parts):
+            if part_index == len(parts) - 1:
+                mark_value = max(1, remaining)
+            else:
+                mark_value = max(1, round(target_set_marks * weights[part_index] / weight_total))
+                remaining -= mark_value
+
+            allocated.append({
+                "label": part.get("label") or part.get("part_label") or chr(97 + part_index),
+                "question": part.get("question") or part.get("question_text") or "",
+                "answer": part.get("answer", ""),
+                "marks": mark_value,
+            })
+
+        normalized_sets.append({
+            "set_number": item.get("set_number") or index,
+            "probability": item.get("probability", "medium"),
+            "topic": item.get("topic", ""),
+            "parts": allocated,
+        })
+
+    return normalized_sets
+
+
 def _generate_with_fallback(
     prompt: str,
     model_candidates: List[str],
@@ -343,7 +426,20 @@ Return ONLY a JSON array — no markdown, no explanation:
 ]"""
 
     try:
-        return _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES, groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES)
+        raw = _generate_with_fallback(prompt, TASK_MODEL_CANDIDATES, groq_model_candidates=GROQ_TASK_MODEL_CANDIDATES)
+        try:
+            import json
+            target_count = max(1, int(count or 10))
+            cleaned = raw
+            if "```json" in cleaned:
+                cleaned = cleaned.split("```json")[1].split("```")[0]
+            elif "```" in cleaned:
+                cleaned = cleaned.split("```")[1].split("```")[0]
+            questions_list = json.loads(cleaned.strip())
+            normalized = _normalize_practice_sets(questions_list, pattern_data, question_type)
+            return json.dumps(normalized[:target_count])
+        except Exception:
+            return raw
     except Exception as e:
         print(f"Practice generation error: {e}")
         return "[]"

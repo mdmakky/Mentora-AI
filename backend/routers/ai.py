@@ -328,6 +328,7 @@ async def generate_practice_questions(
       - RAG chunks from course documents
     """
     db = get_supabase_admin()
+    count = max(5, min(int(count or 8), 8))
 
     # Load cached analysis
     analysis_row = db.table("paper_analyses") \

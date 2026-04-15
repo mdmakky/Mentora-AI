@@ -11,7 +11,7 @@ import QuestionCard from './QuestionCard';
 import Button from '../ui/Button';
 import UploadModal from '../documents/UploadModal';
 
-const QUESTION_COUNTS = [5, 8, 10, 15];
+const QUESTION_COUNTS = [5, 6, 7, 8];
 const QUESTION_TYPES = [
   { value: 'broad', label: 'Broad / Essay', desc: 'Multi-part exam questions with sub-parts' },
   { value: 'short', label: 'Short Answer', desc: '2–4 mark concise questions' },
@@ -76,13 +76,24 @@ const QuestionLabSection = ({ courseId, course }) => {
     setPaperCount, resetSession,
   } = useQuestionLabStore();
 
-  const { documents, deleteDocument } = useDocumentStore();
+  const { documents, deleteDocument, fetchDocuments } = useDocumentStore();
 
   const safeDocuments = Array.isArray(documents) ? documents : [];
   const questionPapers = useMemo(
-    () => safeDocuments.filter(
-      (d) => d.doc_category === 'question_paper' && !d.is_deleted && (!courseId || d.course_id === courseId)
-    ),
+    () => {
+      const filtered = safeDocuments.filter(
+        (d) => d.doc_category === 'question_paper' && !d.is_deleted && (!courseId || d.course_id === courseId)
+      );
+      if (courseId && (safeDocuments.length > 0 || filtered.length > 0)) {
+        console.log(`[QuestionLab] Documents loaded for ${courseId}:`, {
+          totalDocs: safeDocuments.length,
+          filteredQuestionPapers: filtered.length,
+          allQuestionPapers: safeDocuments.filter(d => d.doc_category === 'question_paper').length,
+          docs: filtered.map(d => ({ name: d.file_name, course: d.course_id, deleted: d.is_deleted }))
+        });
+      }
+      return filtered;
+    },
     [safeDocuments, courseId]
   );
 
@@ -92,13 +103,24 @@ const QuestionLabSection = ({ courseId, course }) => {
   }, [questionPapers.length, setPaperCount]);
 
   useEffect(() => {
+    resetSession();
+    setExpandedGroup({ high: true, medium: true, low: false });
+    setQCount(8);
+    setQType('broad');
+    setNewTopic('');
+    setDeletingPaperIds([]);
+
     if (courseId) {
+      // Force fresh fetch from backend (bypass cache)
+      (async () => {
+        await fetchDocuments(courseId);
+      })();
       fetchHotTopics(courseId);
       loadCachedAnalysis(courseId);
     }
-  }, [courseId]);
+  }, [courseId, fetchDocuments, fetchHotTopics, loadCachedAnalysis, resetSession]);
 
-  const hasPapers = paperCount > 0;
+  const hasPapers = questionPapers.length > 0;
   const hasAnalysis = analyzeState === 'done' && patternData;
   const hasQuestions = practiceQuestions.length > 0;
 
@@ -179,7 +201,7 @@ const QuestionLabSection = ({ courseId, course }) => {
           <div className="ql-papers-bar">
             <div className={`ql-papers-count ${hasPapers ? 'has-papers' : ''}`}>
               {hasPapers
-                ? <><CheckCircle2 size={14} /> {paperCount} paper{paperCount > 1 ? 's' : ''} ready</>
+                ? <><CheckCircle2 size={14} /> {questionPapers.length} paper{questionPapers.length > 1 ? 's' : ''} ready</>
                 : <><AlertCircle size={14} /> No papers uploaded yet</>
               }
             </div>

@@ -117,6 +117,8 @@ const useQuestionLabStore = create((set, get) => ({
 
   // ─── Reset ────────────────────────────────────────
   resetSession: () => set({
+    hotTopics: [],
+    hotTopicsLoading: false,
     patternData: null,
     analyzedAt: null,
     analyzeState: 'idle',
@@ -125,6 +127,7 @@ const useQuestionLabStore = create((set, get) => ({
     generateState: 'idle',
     generateError: null,
     savedCount: 0,
+    paperCount: 0,
   }),
 }));
 
