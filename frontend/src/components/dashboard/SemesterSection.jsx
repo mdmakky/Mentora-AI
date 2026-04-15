@@ -4,12 +4,14 @@ import useCourseStore from '../../stores/courseStore';
 import CourseCard from './CourseCard';
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 const COLORS = ['#2563EB', '#059669', '#7C3AED', '#DC2626', '#D97706', '#0891B2', '#E11D48', '#4F46E5'];
 
 const SemesterSection = ({ semester }) => {
   const [open, setOpen] = useState(semester.is_current);
   const [showAdd, setShowAdd] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
     course_code: '',
@@ -75,7 +77,7 @@ const SemesterSection = ({ semester }) => {
             <span className="hidden min-[390px]:inline">Add Course</span>
           </Button>
           <button
-            onClick={() => deleteSemester(semester.id)}
+            onClick={() => setShowDeleteConfirm(true)}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
           >
             <Trash2 size={15} />
@@ -175,6 +177,18 @@ const SemesterSection = ({ semester }) => {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          void deleteSemester(semester.id);
+        }}
+        title="Delete Semester"
+        message={`Delete "${semester.name}" and all courses inside it? This cannot be undone.`}
+        confirmLabel="Delete Semester"
+        confirmVariant="danger"
+      />
     </div>
   );
 };

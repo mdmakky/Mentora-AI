@@ -15,7 +15,7 @@ async def get_user_stats(user: dict = Depends(get_current_user)):
     user_id = user["id"]
 
     # Document count
-    docs = db.table("documents").select("id", count="exact").eq("user_id", user_id).eq("is_deleted", False).execute()
+    docs = db.table("documents").select("id", count="exact").eq("user_id", user_id).neq("is_deleted", True).execute()
     doc_count = docs.count or 0
 
     # Chat session count
@@ -31,7 +31,7 @@ async def get_user_stats(user: dict = Depends(get_current_user)):
     streak_info = calculate_streak(user_id)
 
     # Course count
-    courses = db.table("courses").select("id", count="exact").eq("user_id", user_id).eq("is_archived", False).execute()
+    courses = db.table("courses").select("id", count="exact").eq("user_id", user_id).neq("is_archived", True).execute()
     course_count = courses.count or 0
 
     return {
