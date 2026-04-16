@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     LOCAL_EMBEDDING_BACKEND: str = "auto"  # auto | hash | sentence-transformers
     LOCAL_EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-MiniLM-L3-v2"
     LOCAL_EMBEDDING_DEVICE: str = "cpu"
-    LOCAL_EMBEDDING_BATCH_SIZE: int = 8
+    LOCAL_EMBEDDING_BATCH_SIZE: int = 4  # Keep low for 1GB RAM droplets
 
     # App
     APP_NAME: str = "Mentora"

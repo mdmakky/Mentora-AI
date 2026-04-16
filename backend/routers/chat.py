@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+import logging
 from typing import List, Optional
 from schemas.chat import ChatSessionCreate, ChatSessionUpdate, ChatSessionResponse, ChatMessageCreate, ChatMessageResponse
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user
 from services.rag_service import search_similar_chunks
 from services.gemini_service import generate_chat_response
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
@@ -54,7 +59,7 @@ async def get_session(session_id: str, user: dict = Depends(get_current_user)):
     if not session.data:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    messages = db.table("chat_messages").select("*").eq("session_id", session_id).order("created_at").execute()
+    messages = db.table("chat_messages").select("*").eq("session_id", session_id).order("created_at").limit(200).execute()
 
     return {
         "session": session.data,
@@ -81,7 +86,9 @@ async def delete_session(session_id: str, user: dict = Depends(get_current_user)
 
 
 @router.post("/{session_id}/message", response_model=ChatMessageResponse)
+@limiter.limit("20/minute")
 async def send_message(
+    request: Request,
     session_id: str,
     data: ChatMessageCreate,
     user: dict = Depends(get_current_user),
@@ -163,7 +170,7 @@ async def export_chat(session_id: str, user: dict = Depends(get_current_user)):
     if not session.data:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    messages = db.table("chat_messages").select("*").eq("session_id", session_id).order("created_at").execute()
+    messages = db.table("chat_messages").select("role, content").eq("session_id", session_id).order("created_at").limit(500).execute()
 
     markdown = f"# {session.data['title']}\n\n"
     for msg in (messages.data or []):

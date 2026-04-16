@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Body
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Body, Request
 from fastapi.responses import StreamingResponse
+import logging
 from typing import List, Optional
 from datetime import datetime, timezone
 from schemas.document import DocumentUpdate, DocumentResponse
@@ -13,9 +14,13 @@ from services.pdf_service import (
 from services.copyright_service import run_copyright_check
 from services.rag_service import process_document_pipeline
 from services.conversion_service import convert_to_pdf
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 import uuid
 import httpx
 
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 ALLOWED_TYPES = {
@@ -59,7 +64,9 @@ def _extract_pages_for_scan(file_bytes: bytes, file_type: str):
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=201)
+@limiter.limit("10/minute")
 async def upload_document(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     course_id: str = Form(...),
@@ -148,16 +155,17 @@ async def upload_document(
     flag_reason = ""
 
     if doc_category != "question_paper":
+        # Extract text once and reuse for both copyright check and pipeline
         if file_type == "pdf":
             pages = extract_text_from_pdf(file_bytes)
         elif file_type == "docx":
             pages = extract_text_from_docx(file_bytes)
         elif file_type == "pptx":
             pages = extract_text_from_pptx(file_bytes)
-        
+
         is_flagged, flag_reason = run_copyright_check(file_bytes, pages, file_hash, user["id"], db)
         if is_flagged:
-            print(f"[copyright_check] quarantined doc={file.filename} user={user['id']} course={course_id} reason={flag_reason}")
+            logger.info("[copyright_check] quarantined doc=%s user=%s course=%s reason=%s", file.filename, user["id"], course_id, flag_reason)
 
     processing_status = "quarantined" if is_flagged else ("ready" if doc_category == "question_paper" else "pending")
 
@@ -196,10 +204,12 @@ async def upload_document(
             raise
 
     # If not quarantined, start RAG processing pipeline (skip for question_paper)
+    # Pass pre-extracted pages to avoid re-extracting in the background task
     if not is_flagged and doc_category != "question_paper":
         background_tasks.add_task(
             process_document_pipeline,
             doc_id, course_id, user["id"], file_bytes, file_type, file.filename,
+            pages if pages else None,
         )
 
     return result.data[0]
@@ -413,15 +423,20 @@ async def proxy_document(doc_id: str, user: dict = Depends(get_current_user)):
     }
 
     # Download document from Supabase storage using the path (stored in public_id)
+    PROXY_SIZE_LIMIT = 50 * 1024 * 1024  # 50 MB
     try:
         if public_id:
             file_bytes = db.storage.from_("mentora-docs").download(public_id)
         else:
             # Fallback for old cloudinary documents (which might fail, but added for safety)
             raise HTTPException(status_code=502, detail="Document format not supported for delivery. Please re-upload.")
-            
+
         if not file_bytes or len(file_bytes) == 0:
-             raise HTTPException(status_code=502, detail="Document storage returned empty file")
+            raise HTTPException(status_code=502, detail="Document storage returned empty file")
+        if len(file_bytes) > PROXY_SIZE_LIMIT:
+            raise HTTPException(status_code=413, detail="Document too large to proxy; please download directly")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch document from storage: {str(e)}")
 

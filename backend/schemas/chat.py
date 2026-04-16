@@ -22,7 +22,7 @@ class ChatSessionResponse(BaseModel):
 
 
 class ChatMessageCreate(BaseModel):
-    content: str
+    content: str = Field(..., min_length=1, max_length=5000)
     document_ids: Optional[List[str]] = None
 
 

@@ -1,9 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+import logging
 from core.config import get_settings
 from routers import auth, semesters, courses, folders, documents, chat, ai, study, admin, dashboard
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 settings = get_settings()
+
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title="Mentora API",
@@ -12,6 +26,10 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 frontend_origins = {
     "http://localhost:5173",
@@ -40,6 +58,23 @@ app.include_router(ai.router, prefix="/api/v1")
 app.include_router(study.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+
+
+@app.on_event("startup")
+async def validate_config():
+    required = {
+        "SUPABASE_URL": settings.SUPABASE_URL,
+        "SUPABASE_SERVICE_ROLE_KEY": settings.SUPABASE_SERVICE_ROLE_KEY,
+        "GOOGLE_API_KEY": settings.GOOGLE_API_KEY,
+        "JWT_SECRET_KEY": settings.JWT_SECRET_KEY,
+    }
+    placeholders = {"your-gemini-api-key", "your-super-secret-jwt-key-change-this",
+                    "your-service-role-key", "https://your-project.supabase.co"}
+    missing = [k for k, v in required.items() if not v or v in placeholders]
+    if missing:
+        logger.error("[startup] Missing or placeholder config keys: %s", missing)
+    else:
+        logger.info("[startup] Config validated OK")
 
 
 @app.get("/")

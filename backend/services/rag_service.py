@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import List, Optional
 import time
 import re
@@ -9,6 +10,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from google import genai
 from core.config import get_settings
 from core.database import get_supabase_admin
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 genai_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
@@ -235,7 +238,7 @@ def _embed_batch_local(texts: List[str]) -> List[List[float]]:
     backend = (settings.LOCAL_EMBEDDING_BACKEND or "auto").strip().lower()
 
     if backend not in {"auto", "hash", "sentence-transformers"}:
-        print(f"[embedding] invalid LOCAL_EMBEDDING_BACKEND={settings.LOCAL_EMBEDDING_BACKEND}; using hash")
+        logger.warning("[embedding] invalid LOCAL_EMBEDDING_BACKEND=%s; using hash", settings.LOCAL_EMBEDDING_BACKEND)
         return _embed_batch_hash(texts)
 
     if backend == "hash":
@@ -267,10 +270,7 @@ def _embed_batch_local(texts: List[str]) -> List[List[float]]:
             if backend == "sentence-transformers" or _is_memory_pressure_error(st_error):
                 _local_model_unavailable_reason = str(st_error)
 
-            print(
-                "[embedding] sentence-transformers unavailable, "
-                f"falling back to hash: {st_error}"
-            )
+            logger.warning("[embedding] sentence-transformers unavailable, falling back to hash: %s", st_error)
 
             if backend == "sentence-transformers":
                 # Strict mode requested; still degrade to hash to keep ingestion/search alive.
@@ -291,16 +291,17 @@ def _embed_batch(texts: List[str]) -> List[List[float]]:
         if not settings.ENABLE_LOCAL_EMBEDDING_FALLBACK:
             raise
 
-        print(f"[embedding] Gemini failed, using local fallback: {gemini_error}")
+        logger.warning("[embedding] Gemini failed, using local fallback: %s", gemini_error)
         try:
             return _embed_batch_local(texts)
         except Exception as local_error:
             raise Exception(f"Gemini embedding failed: {gemini_error}; local fallback failed: {local_error}")
 
 
-def generate_query_embedding(text: str) -> List[float]:
-    """Generate embedding for a query."""
-    return _embed_batch([text])[0]
+def generate_query_embedding(text: str, course_context: Optional[str] = None) -> List[float]:
+    """Generate embedding for a query, optionally prefixed with course context."""
+    prefixed = f"[{course_context}] {text}" if course_context else text
+    return _embed_batch([prefixed])[0]
 
 
 async def store_chunks_with_embeddings(
@@ -315,13 +316,24 @@ async def store_chunks_with_embeddings(
     quota_exhausted = False
     last_error = None
 
+    # Deduplicate chunks within this document by content hash (in-memory)
+    seen_content_hashes: set = set()
+    deduped_chunks = []
+    for chunk in chunks:
+        content_hash = hashlib.md5(chunk["content"].encode()).hexdigest()
+        if content_hash not in seen_content_hashes:
+            seen_content_hashes.add(content_hash)
+            deduped_chunks.append(chunk)
+    chunks = deduped_chunks
+
     for i in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
         batch = chunks[i:i + EMBEDDING_BATCH_SIZE]
         try:
             embeddings = _embed_batch([c["content"] for c in batch])
 
-            for chunk, embedding in zip(batch, embeddings):
-                db.table("document_chunks").insert({
+            # Batch insert all chunks in one DB round-trip
+            insert_rows = [
+                {
                     "document_id": chunk["document_id"],
                     "course_id": course_id,
                     "user_id": user_id,
@@ -332,14 +344,16 @@ async def store_chunks_with_embeddings(
                     "slide_number": chunk.get("slide_number"),
                     "embedding": embedding,
                     "token_count": chunk.get("token_count", 0),
-                }).execute()
-
-                stored_count += 1
+                }
+                for chunk, embedding in zip(batch, embeddings)
+            ]
+            db.table("document_chunks").insert(insert_rows).execute()
+            stored_count += len(insert_rows)
         except Exception as e:
             last_error = e
             failed_count += len(batch)
             first_chunk_idx = batch[0].get("chunk_index") if batch else "?"
-            print(f"Error storing chunk batch starting at {first_chunk_idx}: {e}")
+            logger.error("Error storing chunk batch starting at %s: %s", first_chunk_idx, e)
             if _is_quota_exhausted_error(e):
                 quota_exhausted = True
                 break
@@ -352,18 +366,21 @@ async def store_chunks_with_embeddings(
     }
 
 
+SIMILARITY_THRESHOLD = 0.45  # Chunks below this score are excluded from LLM context
+
 async def search_similar_chunks(
     query: str,
     user_id: str,
     course_id: str,
     document_ids: Optional[List[str]] = None,
     top_k: int = 7,
+    course_context: Optional[str] = None,
 ) -> List[dict]:
     """Search for similar chunks using pgvector cosine similarity."""
     db = get_supabase_admin()
 
     try:
-        query_embedding = generate_query_embedding(query)
+        query_embedding = generate_query_embedding(query, course_context=course_context)
 
         # Use Supabase RPC for vector similarity search
         params = {
@@ -377,9 +394,14 @@ async def search_similar_chunks(
             params["match_document_ids"] = document_ids
 
         result = db.rpc("match_document_chunks", params).execute()
-        return result.data or []
+        chunks = result.data or []
+
+        # Filter out low-relevance chunks to reduce LLM noise
+        filtered = [c for c in chunks if c.get("similarity", 1.0) >= SIMILARITY_THRESHOLD]
+        # Fall back to all chunks if filtering removes everything (e.g., hash backend)
+        return filtered if filtered else chunks
     except Exception as e:
-        print(f"Vector search or embedding error: {e}")
+        logger.error("Vector search or embedding error: %s", e)
         # Fallback: basic text search
         return []
 
@@ -391,6 +413,7 @@ async def process_document_pipeline(
     file_bytes: bytes,
     file_type: str,
     file_name: str,
+    preextracted_pages: Optional[List[dict]] = None,
 ):
     """Full document processing pipeline: extract → chunk → embed → store."""
     db = get_supabase_admin()
@@ -399,17 +422,20 @@ async def process_document_pipeline(
         # Update status to processing
         db.table("documents").update({"processing_status": "processing"}).eq("id", doc_id).execute()
 
-        # Extract text based on file type
-        from services.pdf_service import extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx
-
-        if file_type == "pdf":
-            pages = extract_text_from_pdf(file_bytes)
-        elif file_type == "docx":
-            pages = extract_text_from_docx(file_bytes)
-        elif file_type == "pptx":
-            pages = extract_text_from_pptx(file_bytes)
+        # Reuse pre-extracted pages when available (avoids double extraction on upload)
+        if preextracted_pages is not None:
+            pages = preextracted_pages
         else:
-            raise ValueError(f"Unsupported file type: {file_type}")
+            from services.pdf_service import extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx
+
+            if file_type == "pdf":
+                pages = extract_text_from_pdf(file_bytes)
+            elif file_type == "docx":
+                pages = extract_text_from_docx(file_bytes)
+            elif file_type == "pptx":
+                pages = extract_text_from_pptx(file_bytes)
+            else:
+                raise ValueError(f"Unsupported file type: {file_type}")
 
         if not pages:
             db.table("documents").update({"processing_status": "failed"}).eq("id", doc_id).execute()
@@ -427,16 +453,19 @@ async def process_document_pipeline(
         if stored_count == 0 or failed_count > 0:
             fail_reason = "quota_exhausted" if quota_exhausted else "embedding_failed"
             # Remove partial chunk writes so failed documents don't pollute retrieval.
-            db.table("document_chunks").delete().eq("document_id", doc_id).eq("user_id", user_id).execute()
+            try:
+                db.table("document_chunks").delete().eq("document_id", doc_id).eq("user_id", user_id).execute()
+            except Exception as cleanup_err:
+                logger.error("[rag_pipeline] failed to clean up chunks for doc=%s: %s", doc_id, cleanup_err)
             db.table("documents").update({
                 "processing_status": "failed",
                 "chunk_count": 0,
                 "page_count": len(pages),
             }).eq("id", doc_id).execute()
             if quota_exhausted:
-                print(
-                    f"[rag_pipeline] embedding quota exhausted for doc={doc_id}; "
-                    f"stored={stored_count}, failed={failed_count}"
+                logger.warning(
+                    "[rag_pipeline] embedding quota exhausted for doc=%s; stored=%d, failed=%d",
+                    doc_id, stored_count, failed_count,
                 )
             return
 
@@ -448,5 +477,5 @@ async def process_document_pipeline(
         }).eq("id", doc_id).execute()
 
     except Exception as e:
-        print(f"Document processing error for {doc_id}: {e}")
+        logger.error("Document processing error for %s: %s", doc_id, e)
         db.table("documents").update({"processing_status": "failed"}).eq("id", doc_id).execute()
