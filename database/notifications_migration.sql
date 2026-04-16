@@ -16,3 +16,6 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON public.notifications(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(user_id, is_read) WHERE is_read = FALSE;
+
+-- Enable Supabase Realtime on this table so the frontend can receive live inserts
+ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;

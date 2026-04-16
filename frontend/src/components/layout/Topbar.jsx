@@ -2,10 +2,13 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Menu, Search, Bell, ChevronRight, X, FileText, BookOpen, ShieldAlert, CheckCircle2, XCircle, Send, AlertTriangle } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
+import { supabase } from '../../lib/supabaseClient';
+import useAuthStore from '../../stores/authStore';
 
 const Topbar = ({ onMenuClick }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
@@ -16,7 +19,6 @@ const Topbar = ({ onMenuClick }) => {
   const searchInputRef = useRef(null);
   const searchTimerRef = useRef(null);
   const notifRef = useRef(null);
-  const notifPollRef = useRef(null);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
@@ -27,12 +29,35 @@ const Topbar = ({ onMenuClick }) => {
     } catch {/* silent */}
   }, []);
 
-  // Poll notifications every 30 seconds
+  // Load existing notifications once on mount, then subscribe to realtime inserts
   useEffect(() => {
+    if (!user?.id) return;
     fetchNotifications();
-    notifPollRef.current = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(notifPollRef.current);
-  }, [fetchNotifications]);
+
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          // No server-side filter: notifications table has no RLS so we can't
+          // rely on Supabase to filter. We guard client-side instead.
+        },
+        (payload) => {
+          if (payload.new?.user_id !== user.id) return;
+          setNotifications((prev) => [payload.new, ...prev]);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          fetchNotifications();
+        }
+      });
+
+    return () => supabase.removeChannel(channel);
+  }, [user?.id, fetchNotifications]);
 
   // When dropdown opens, refresh and mark all read after a short delay
   useEffect(() => {
