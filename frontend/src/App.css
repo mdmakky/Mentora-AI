@@ -365,6 +365,7 @@
   transition: all var(--transition-fast);
   white-space: nowrap;
   overflow: hidden;
+  position: relative;
 }
 
 .sidebar-link:hover {

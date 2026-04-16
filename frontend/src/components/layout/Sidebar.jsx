@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   BookOpen,
@@ -11,9 +11,12 @@ import {
   ShieldCheck,
   Users,
   FileWarning,
-  Activity
+  Activity,
+  ClipboardList
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import useAuthStore from '../../stores/authStore';
+import { apiClient } from '../../lib/apiClient';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -24,7 +27,22 @@ const navItems = [
 
 const Sidebar = ({ collapsed, mobileOpen, onToggle, onMobileClose }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuthStore();
+  const [pendingReviews, setPendingReviews] = useState(0);
+
+  useEffect(() => {
+    if (!user?.is_admin) return;
+    const fetchCount = async () => {
+      try {
+        const data = await apiClient.get('/admin/stats');
+        setPendingReviews(data?.pending_reviews || 0);
+      } catch {/* silent */}
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60000);
+    return () => clearInterval(interval);
+  }, [user?.is_admin]);
 
   const handleLogout = () => {
     logout();
@@ -71,20 +89,29 @@ const Sidebar = ({ collapsed, mobileOpen, onToggle, onMobileClose }) => {
             {[
               { to: '/admin/dashboard', label: 'Admin Dashboard', icon: ShieldCheck },
               { to: '/admin/users', label: 'User Roles', icon: Users },
-              { to: '/admin/documents', label: 'Quarantine', icon: FileWarning },
+              { to: '/admin/documents?tab=review_pending', label: 'Review Queue', icon: ClipboardList, badge: pendingReviews, activeCheck: () => location.pathname === '/admin/documents' && new URLSearchParams(location.search).get('tab') === 'review_pending' },
+              { to: '/admin/documents', label: 'Quarantine', icon: FileWarning, activeCheck: () => location.pathname === '/admin/documents' && new URLSearchParams(location.search).get('tab') !== 'review_pending' },
               { to: '/admin/logs', label: 'Activity Logs', icon: Activity },
             ].map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 onClick={onMobileClose}
-                className={({ isActive }) =>
-                  `sidebar-link ${isActive ? 'active' : ''}`
+                className={() =>
+                  `sidebar-link ${item.activeCheck ? (item.activeCheck() ? 'active' : '') : (location.pathname === item.to ? 'active' : '')}`
                 }
                 title={collapsed ? item.label : undefined}
               >
                 <item.icon size={20} className="sidebar-link-icon text-indigo-400" />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {!collapsed && item.badge > 0 && (
+                  <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white px-1">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
+                {collapsed && item.badge > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-rose-500" />
+                )}
               </NavLink>
             ))}
           </>

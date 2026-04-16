@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 import logging
 from core.config import get_settings
-from routers import auth, semesters, courses, folders, documents, chat, ai, study, admin, dashboard
+from routers import auth, semesters, courses, folders, documents, chat, ai, study, admin, dashboard, notifications
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +58,7 @@ app.include_router(ai.router, prefix="/api/v1")
 app.include_router(study.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
 
 
 @app.on_event("startup")

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { ShieldCheck, Users, FileText, Database, Activity, AlertTriangle, TrendingUp } from 'lucide-react';
+import { ShieldCheck, Users, FileText, Database, Activity, AlertTriangle, ClipboardList, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient';
 import Spinner from '../../components/ui/Spinner';
 import {
@@ -27,11 +28,6 @@ const StatCard = ({ icon: Icon, title, value, gradient, shadowColor, subtitle })
         <p className="text-sm font-semibold tracking-wide text-slate-500 uppercase">{title}</p>
         <div className="mt-1 flex items-baseline gap-2">
           <h3 className="text-3xl font-extrabold tracking-tight text-slate-800">{value}</h3>
-          {(Math.random() > 0.5) && (
-            <span className="flex items-center text-xs font-bold text-emerald-500 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-              <TrendingUp size={12} className="mr-1" /> +12%
-            </span>
-          )}
         </div>
         {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
       </div>
@@ -40,6 +36,7 @@ const StatCard = ({ icon: Icon, title, value, gradient, shadowColor, subtitle })
 );
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -110,6 +107,46 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Review Queue Action Banner — shown when there are pending reviews */}
+      {(stats.pending_reviews > 0 || stats.quarantined_pending > 0) && (
+        <div className="flex flex-col sm:flex-row gap-3">
+          {stats.pending_reviews > 0 && (
+            <button
+              onClick={() => navigate('/admin/documents?tab=review_pending')}
+              className="flex-1 flex items-center gap-4 rounded-2xl bg-violet-600 px-6 py-4 text-white shadow-lg shadow-violet-500/30 hover:bg-violet-700 transition-all hover:-translate-y-0.5 active:translate-y-0 group"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <ClipboardList size={22} strokeWidth={2.5} />
+              </div>
+              <div className="text-left flex-1">
+                <p className="text-xs font-bold uppercase tracking-wider opacity-80">Action Required</p>
+                <p className="text-lg font-extrabold">
+                  {stats.pending_reviews} Review Request{stats.pending_reviews !== 1 ? 's' : ''} Pending
+                </p>
+              </div>
+              <ChevronRight size={20} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+            </button>
+          )}
+          {stats.quarantined_pending > 0 && (
+            <button
+              onClick={() => navigate('/admin/documents?tab=quarantined')}
+              className="flex-1 flex items-center gap-4 rounded-2xl bg-amber-500 px-6 py-4 text-white shadow-lg shadow-amber-500/30 hover:bg-amber-600 transition-all hover:-translate-y-0.5 active:translate-y-0 group"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <AlertTriangle size={22} strokeWidth={2.5} />
+              </div>
+              <div className="text-left flex-1">
+                <p className="text-xs font-bold uppercase tracking-wider opacity-80">Quarantined</p>
+                <p className="text-lg font-extrabold">
+                  {stats.quarantined_pending} Document{stats.quarantined_pending !== 1 ? 's' : ''} Flagged
+                </p>
+              </div>
+              <ChevronRight size={20} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Grid Highlighting Cards */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">

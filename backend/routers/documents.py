@@ -13,6 +13,7 @@ from services.pdf_service import (
 )
 from services.copyright_service import run_copyright_check
 from services.rag_service import process_document_pipeline
+from services.notification_service import create_notification, notify_admins
 from services.conversion_service import convert_to_pdf
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -211,6 +212,15 @@ async def upload_document(
             doc_id, course_id, user["id"], file_bytes, file_type, file.filename,
             pages if pages else None,
         )
+    elif is_flagged:
+        create_notification(
+            user["id"],
+            "document_flagged",
+            "Document Flagged for Review",
+            f'Your document "{file.filename}" was flagged for a potential copyright concern. '
+            f'You can request a manual admin review from the document card.',
+            {"doc_id": doc_id},
+        )
 
     return result.data[0]
 
@@ -352,6 +362,15 @@ async def request_document_review(
                 detail="Database migration required for review requests. Run database/document_review_flow_migration.sql.",
             )
         raise
+
+    # Notify all admins that a review has been requested
+    doc_name = doc.data.get("file_name", "a document")
+    notify_admins(
+        "review_submitted",
+        "New Admin Review Request",
+        f'A user has submitted a review request for "{doc_name}". Check the Admin → Review Queue.',
+        {"doc_id": doc_id},
+    )
 
     return result.data[0]
 

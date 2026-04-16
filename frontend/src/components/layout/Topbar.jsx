@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Menu, Search, Bell, ChevronRight, X, FileText, BookOpen } from 'lucide-react';
+import { Menu, Search, Bell, ChevronRight, X, FileText, BookOpen, ShieldAlert, CheckCircle2, XCircle, Send, AlertTriangle } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
 
 const Topbar = ({ onMenuClick }) => {
@@ -11,9 +11,41 @@ const Topbar = ({ onMenuClick }) => {
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
   const searchInputRef = useRef(null);
   const searchTimerRef = useRef(null);
   const notifRef = useRef(null);
+  const notifPollRef = useRef(null);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const data = await apiClient.get('/notifications');
+      setNotifications(data || []);
+    } catch {/* silent */}
+  }, []);
+
+  // Poll notifications every 30 seconds
+  useEffect(() => {
+    fetchNotifications();
+    notifPollRef.current = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(notifPollRef.current);
+  }, [fetchNotifications]);
+
+  // When dropdown opens, refresh and mark all read after a short delay
+  useEffect(() => {
+    if (!notifOpen) return;
+    fetchNotifications();
+    const t = setTimeout(async () => {
+      if (unreadCount > 0) {
+        await apiClient.put('/notifications/read-all');
+        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [notifOpen]);
 
   // Build breadcrumbs from path
   const pathSegments = location.pathname.split('/').filter(Boolean);
@@ -146,16 +178,53 @@ const Topbar = ({ onMenuClick }) => {
               title="Notifications"
             >
               <Bell size={18} />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white px-1 ring-2 ring-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </button>
             {/* Notification dropdown */}
             {notifOpen && (
-              <div className="absolute top-full right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-50 animate-scale-in overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100">
+              <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 animate-scale-in overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                   <p className="text-sm font-bold text-slate-800">Notifications</p>
+                  {unreadCount > 0 && (
+                    <span className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full">{unreadCount} new</span>
+                  )}
                 </div>
-                <div className="py-8 text-center">
-                  <Bell size={24} className="text-slate-200 mx-auto mb-2" />
-                  <p className="text-xs text-slate-400">No new notifications</p>
+                <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-50">
+                  {notifications.length === 0 ? (
+                    <div className="py-10 text-center">
+                      <Bell size={24} className="text-slate-200 mx-auto mb-2" />
+                      <p className="text-xs text-slate-400">No notifications yet</p>
+                    </div>
+                  ) : (
+                    notifications.map((n) => {
+                      const icons = {
+                        document_flagged: <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />,
+                        review_approved: <CheckCircle2 size={14} className="text-emerald-500 shrink-0 mt-0.5" />,
+                        review_rejected: <XCircle size={14} className="text-rose-500 shrink-0 mt-0.5" />,
+                        review_submitted: <Send size={14} className="text-blue-500 shrink-0 mt-0.5" />,
+                      };
+                      return (
+                        <div
+                          key={n.id}
+                          className={`px-4 py-3 flex items-start gap-3 hover:bg-slate-50 transition cursor-default ${!n.is_read ? 'bg-blue-50/40' : ''}`}
+                        >
+                          <div className="mt-0.5">{icons[n.type] || <ShieldAlert size={14} className="text-slate-400 shrink-0" />}</div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-800">{n.title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 leading-snug">{n.body}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              {new Date(n.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          {!n.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-1.5" />}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             )}

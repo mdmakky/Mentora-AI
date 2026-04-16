@@ -16,6 +16,11 @@ class ReviewDecisionRequest(BaseModel):
     note: Optional[str] = None
 
 
+class RejectDocumentRequest(BaseModel):
+    warn_user: bool = False
+    suspend_user_flag: bool = False
+
+
 @router.get("/stats")
 async def admin_stats(admin: dict = Depends(get_current_admin)):
     """Get system-wide statistics."""
@@ -138,7 +143,7 @@ async def list_quarantined(admin: dict = Depends(get_current_admin)):
     db = get_supabase_admin()
     result = (
         db.table("documents")
-        .select("*, users(email, full_name)")
+        .select("*, users!documents_user_id_fkey(email, full_name)")
         .eq("processing_status", "quarantined")
         .eq("is_deleted", False)
         .order("created_at", desc=True)
@@ -151,15 +156,18 @@ async def list_quarantined(admin: dict = Depends(get_current_admin)):
 async def list_review_requests(admin: dict = Depends(get_current_admin)):
     """List user-requested manual review queue for flagged documents."""
     db = get_supabase_admin()
-    result = (
-        db.table("documents")
-        .select("*, users(email, full_name)")
-        .eq("review_status", "pending")
-        .eq("is_deleted", False)
-        .order("review_requested_at", desc=True)
-        .execute()
-    )
-    return result.data or []
+    try:
+        result = (
+            db.table("documents")
+            .select("*, users!documents_user_id_fkey(email, full_name)")
+            .eq("review_status", "pending")
+            .eq("is_deleted", False)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return result.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch review queue: {e}")
 
 
 @router.get("/documents")
@@ -171,7 +179,7 @@ async def list_all_documents(
 ):
     """List all documents with optional filtering."""
     db = get_supabase_admin()
-    query = db.table("documents").select("*, users(email, full_name)", count="exact").eq("is_deleted", False)
+    query = db.table("documents").select("*, users!documents_user_id_fkey(email, full_name)", count="exact").eq("is_deleted", False)
 
     if status:
         query = query.eq("processing_status", status)
@@ -187,6 +195,35 @@ async def list_all_documents(
     }
 
 
+@router.get("/documents/{doc_id}/signed-url")
+async def get_admin_document_signed_url(doc_id: str, admin: dict = Depends(get_current_admin)):
+    """Return a short-lived signed URL so admins can view any document."""
+    db = get_supabase_admin()
+    result = (
+        db.table("documents")
+        .select("cloudinary_public_id, file_type, file_name")
+        .eq("id", doc_id)
+        .eq("is_deleted", False)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+    public_id = result.data.get("cloudinary_public_id")
+    if not public_id:
+        raise HTTPException(status_code=404, detail="No storage path for this document")
+    try:
+        signed = db.storage.from_("mentora-docs").create_signed_url(public_id, 300)
+        url = signed.get("signedURL") or signed.get("signed_url") or signed.get("signedUrl")
+        if not url:
+            raise HTTPException(status_code=502, detail="Storage did not return a signed URL")
+        return {"url": url, "file_name": result.data.get("file_name"), "file_type": result.data.get("file_type")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Storage error: {e}")
+
+
 @router.put("/documents/{doc_id}/approve")
 async def admin_approve_document(doc_id: str, admin: dict = Depends(get_current_admin)):
     """Approve a quarantined document."""
@@ -197,13 +234,12 @@ async def admin_approve_document(doc_id: str, admin: dict = Depends(get_current_
 @router.put("/documents/{doc_id}/reject")
 async def admin_reject_document(
     doc_id: str,
-    warn_user: bool = False,
-    suspend_user_flag: bool = False,
+    payload: RejectDocumentRequest = RejectDocumentRequest(),
     admin: dict = Depends(get_current_admin),
 ):
     """Reject a quarantined document."""
     try:
-        reject_document(admin["id"], doc_id, warn_user, suspend_user_flag)
+        reject_document(admin["id"], doc_id, payload.warn_user, payload.suspend_user_flag)
         return {"message": "Document rejected"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

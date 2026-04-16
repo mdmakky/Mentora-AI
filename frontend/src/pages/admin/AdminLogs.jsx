@@ -76,8 +76,17 @@ const AdminLogs = () => {
             >
               <option value="">All Telemetry Events</option>
               <option value="suspend_user">Suspensions</option>
+              <option value="unsuspend_user">Unsuspensions</option>
+              <option value="warn_user">User Warnings</option>
+              <option value="reset_warnings">Warning Resets</option>
+              <option value="verify_email">Email Verifications</option>
+              <option value="delete_user">User Deletions</option>
               <option value="approve_document">Approved Documents</option>
               <option value="reject_document">Rejected Documents</option>
+              <option value="reject_document_warn">Rejected + Warned</option>
+              <option value="reject_document_suspend">Rejected + Suspended</option>
+              <option value="review_approve">Review Approvals</option>
+              <option value="review_reject_with_penalty">Review Rejections</option>
               <option value="force_delete_document">Destructive Erases</option>
             </select>
           </div>

@@ -1,15 +1,150 @@
 import { useState, useEffect } from 'react';
-import { FileWarning, CheckCircle, XCircle, Search, Trash2, Eye, ExternalLink } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { FileWarning, CheckCircle, XCircle, Trash2, ExternalLink, MessageSquare, AlertTriangle, FileText, Eye } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
+import Modal from '../../components/ui/Modal';
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const StatusBadge = ({ status }) => {
+  const map = {
+    quarantined: 'bg-amber-50 text-amber-700 ring-amber-200',
+    processed:   'bg-green-50 text-green-700 ring-green-200',
+    failed:      'bg-red-50 text-red-700 ring-red-200',
+    pending:     'bg-sky-50 text-sky-700 ring-sky-200',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ring-1 capitalize ${map[status] || 'bg-gray-50 text-gray-600 ring-gray-200'}`}>
+      {status}
+    </span>
+  );
+};
+
+const openAdminPdf = async (docId) => {
+  const toastId = toast.loading('Loading document…');
+  try {
+    const data = await apiClient.get(`/admin/documents/${docId}/signed-url`);
+    toast.dismiss(toastId);
+    window.open(data.url, '_blank', 'noreferrer');
+  } catch {
+    toast.dismiss(toastId);
+    toast.error('Could not load document.');
+  }
+};
+
+// ── Review Appeal Card ────────────────────────────────────────────────────────
+const ReviewCard = ({ doc, onApprove, onReject, onDelete }) => {
+  const [expanded, setExpanded] = useState(false);
+  const note = doc.review_note || '';
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      {/* Top row */}
+      <div className="flex items-start gap-4 px-5 py-4">
+        <span className="mt-0.5 flex-shrink-0 text-[11px] font-bold text-gray-400 border border-gray-200 rounded px-1.5 py-0.5 uppercase">
+          {doc.file_type}
+        </span>
+
+        <div className="flex-1 min-w-0">
+          {/* File + user */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-semibold text-gray-800 truncate" title={doc.file_name}>{doc.file_name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {doc.users?.full_name || 'Unknown'} &middot; {doc.users?.email} &middot;{' '}
+                {new Date(doc.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {doc.copyright_flag && (
+                <span className="text-[10px] font-semibold uppercase text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                  Copyright
+                </span>
+              )}
+              <StatusBadge status={doc.processing_status} />
+            </div>
+          </div>
+
+          {/* Flag reason */}
+          {doc.flag_reason && (
+            <div className="mt-3 flex items-start gap-2 border-l-2 border-amber-300 pl-3 py-1">
+              <AlertTriangle size={13} className="text-amber-500 shrink-0 mt-0.5" strokeWidth={2} />
+              <p className="text-xs text-gray-600">
+                <span className="font-semibold text-gray-700">Flag: </span>{doc.flag_reason}
+              </p>
+            </div>
+          )}
+
+          {/* Appeal message */}
+          <div className="mt-3 flex items-start gap-2 border-l-2 border-gray-200 pl-3 py-1">
+            <MessageSquare size={13} className="text-gray-400 shrink-0 mt-0.5" strokeWidth={1.5} />
+            {note ? (
+              <p className="text-xs text-gray-600 leading-relaxed">
+                <span className="font-semibold text-gray-700">User appeal: </span>
+                {expanded ? note : note.slice(0, 140)}
+                {note.length > 140 && (
+                  <button onClick={() => setExpanded(e => !e)} className="ml-1 text-gray-400 hover:text-gray-600 underline underline-offset-2">
+                    {expanded ? 'less' : 'more'}
+                  </button>
+                )}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 italic">No appeal message provided.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Action bar */}
+      <div className="flex items-center justify-between gap-2 px-5 py-2.5 bg-gray-50 border-t border-gray-100">
+        <button
+          onClick={() => openAdminPdf(doc.id)}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-800 transition-colors"
+        >
+          <Eye size={13} /> View document
+        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onApprove(doc)}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-green-200 text-xs font-semibold text-green-700 bg-white hover:bg-green-50 transition-colors"
+          >
+            <CheckCircle size={13} strokeWidth={2} /> Approve
+          </button>
+          <button
+            onClick={() => onReject(doc)}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-red-200 text-xs font-semibold text-red-700 bg-white hover:bg-red-50 transition-colors"
+          >
+            <XCircle size={13} strokeWidth={2} /> Reject
+          </button>
+          <button
+            onClick={() => onDelete(doc.id)}
+            title="Force delete"
+            className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={14} strokeWidth={1.5} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 const AdminDocuments = () => {
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') || 'quarantined';
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('quarantined');
+  const [statusFilter, setStatusFilter] = useState(tabFromUrl);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [reviewModal, setReviewModal] = useState(null);
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  useEffect(() => { setStatusFilter(tabFromUrl); setPage(1); }, [tabFromUrl]);
 
   const fetchDocuments = async () => {
     try {
@@ -19,262 +154,272 @@ const AdminDocuments = () => {
         setDocuments(data || []);
         setTotal((data || []).length);
       } else {
-        const queryParams = new URLSearchParams({ page, per_page: 20 });
-        if (statusFilter) queryParams.append('status', statusFilter);
-
-        const data = await apiClient.get(`/admin/documents?${queryParams.toString()}`);
+        const q = new URLSearchParams({ page, per_page: 20 });
+        if (statusFilter) q.append('status', statusFilter);
+        const data = await apiClient.get(`/admin/documents?${q}`);
         setDocuments(data.documents || []);
         setTotal(data.total || 0);
       }
-    } catch (error) {
-      toast.error(error.message || 'Failed to fetch documents');
+    } catch (e) {
+      toast.error(e.message || 'Failed to load documents');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchDocuments();
-  }, [statusFilter, page]);
+  useEffect(() => { fetchDocuments(); }, [statusFilter, page]);
 
-  const handleAction = async (action, docId, successMsg) => {
+  const openReviewModal = (doc, decision) => { setReviewModal({ doc, decision }); setReviewNote(''); };
+
+  const submitReview = async () => {
+    if (!reviewNote.trim()) { toast.error('Please write a decision note.'); return; }
+    setReviewSubmitting(true);
     try {
-      if (action === 'force-delete') {
-        const confirmDelete = window.confirm('Permanently delete this document from the system?');
-        if (!confirmDelete) return;
-        await apiClient.delete(`/admin/documents/${docId}/force-delete`);
-      } else if (action === 'reject') {
-        const warnUser = window.confirm('Do you want to add a copyright violation warning to the user\'s profile?');
-        await apiClient.put(`/admin/documents/${docId}/reject`, { warn_user: warnUser, suspend_user_flag: false });
-      } else if (action === 'review-approve') {
-        await apiClient.put(`/admin/documents/${docId}/review`, { decision: 'approve', note: 'Approved after manual review' });
-      } else if (action === 'review-reject') {
-        const confirmReject = window.confirm('Reject this request? A penalty warning will be applied to the user.');
-        if (!confirmReject) return;
-        await apiClient.put(`/admin/documents/${docId}/review`, { decision: 'reject', note: 'Rejected after manual review' });
-      } else {
-        await apiClient.put(`/admin/documents/${docId}/${action}`);
-      }
-      toast.success(successMsg);
+      const { doc, decision } = reviewModal;
+      await apiClient.put(`/admin/documents/${doc.id}/review`, { decision, note: reviewNote.trim() });
+      toast.success(decision === 'approve' ? 'Appeal approved — document unlocked' : 'Appeal rejected — penalty applied');
+      setReviewModal(null);
       fetchDocuments();
-    } catch (error) {
-      toast.error(error.message || `Failed to ${action} document`);
+    } catch (e) {
+      toast.error(e.message || 'Failed to submit decision');
+    } finally {
+      setReviewSubmitting(false);
     }
   };
 
+  const handleAction = async (action, docId, msg) => {
+    try {
+      if (action === 'force-delete') {
+        if (!window.confirm('Permanently delete this document?')) return;
+        await apiClient.delete(`/admin/documents/${docId}/force-delete`);
+      } else if (action === 'reject') {
+        const warn = window.confirm('Add a copyright violation warning to the user?');
+        await apiClient.put(`/admin/documents/${docId}/reject`, { warn_user: warn, suspend_user_flag: false });
+      } else {
+        await apiClient.put(`/admin/documents/${docId}/${action}`);
+      }
+      toast.success(msg);
+      fetchDocuments();
+    } catch (e) {
+      toast.error(e.message || `Action failed`);
+    }
+  };
+
+  const TABS = [
+    { key: 'quarantined',    label: 'Quarantined' },
+    { key: 'review_pending', label: 'Review Queue' },
+    { key: 'pending',        label: 'Pending' },
+    { key: 'processed',      label: 'Processed' },
+    { key: '',               label: 'All' },
+  ];
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8 animate-fade-in">
-      
-      {/* Premium Header Context */}
-      <div className="relative overflow-hidden rounded-3xl bg-white px-8 py-8 shadow-sm ring-1 ring-slate-100 flex items-center justify-between">
-        <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
-        <div className="relative z-10 flex items-center gap-6">
-           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-violet-500 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30">
-            <FileWarning size={32} strokeWidth={2} />
-          </div>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-800">Quarantine Filters</h1>
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              Systematic oversight of copyright violations and ingestion processing errors
-            </p>
-          </div>
+    <div className="max-w-5xl mx-auto px-4 py-8 sm:px-6 space-y-5">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 pb-1">
+        <FileWarning size={20} className="text-gray-500" strokeWidth={1.5} />
+        <div>
+          <h1 className="text-lg font-bold text-gray-800">Document Management</h1>
+          <p className="text-xs text-gray-400">Review flagged content and action user appeals</p>
         </div>
       </div>
 
-      <div className="rounded-3xl bg-white shadow-lg shadow-slate-200/40 ring-1 ring-slate-100 overflow-hidden">
-        {/* Sleek Floating Tabs */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50 backdrop-blur-sm">
-          {['quarantined', 'review_pending', 'pending', 'processed'].map(status => (
-            <button
-              key={status}
-              onClick={() => { setStatusFilter(status); setPage(1); }}
-              className={`relative px-5 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition-all duration-300 ${
-                statusFilter === status 
-                  ? 'bg-linear-to-r from-violet-500 to-fuchsia-600 text-white shadow-md shadow-violet-500/25 scale-105' 
-                  : 'bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600 ring-1 ring-slate-200 shadow-sm'
-              }`}
-            >
-              {status === 'review_pending' ? 'review queue' : status}
-              {statusFilter === status && status === 'quarantined' && (
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-400 border-2 border-white"></span>
-                </span>
-              )}
-            </button>
-          ))}
-          <div className="h-6 w-px bg-slate-200 mx-2" />
+      {/* Tabs */}
+      <div className="flex items-center gap-1.5 flex-wrap border-b border-gray-100 pb-4">
+        {TABS.map(tab => (
           <button
-             onClick={() => { setStatusFilter(''); setPage(1); }}
-             className={`px-5 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition-all duration-300 ${
-                statusFilter === '' 
-                  ? 'bg-slate-800 text-white shadow-md scale-105' 
-                  : 'bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600 ring-1 ring-slate-200 shadow-sm'
-              }`}
+            key={tab.key}
+            onClick={() => { setStatusFilter(tab.key); setPage(1); }}
+            className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              statusFilter === tab.key
+                ? 'bg-gray-900 text-white'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            }`}
           >
-            Universal Query
+            {tab.label}
           </button>
-        </div>
+        ))}
+      </div>
 
-        {/* Dynamic Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      {/* Content */}
+      {loading ? (
+        <div className="flex justify-center py-16"><Spinner className="text-gray-400" /></div>
+      ) : documents.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <FileText size={28} className="text-gray-300 mb-3" strokeWidth={1} />
+          <p className="text-sm font-medium text-gray-500">No documents found</p>
+          <p className="text-xs text-gray-400 mt-0.5">Nothing to show under this filter.</p>
+        </div>
+      ) : statusFilter === 'review_pending' ? (
+        <div className="space-y-3">
+          <p className="text-xs text-gray-400">{total} appeal{total !== 1 ? 's' : ''} awaiting review</p>
+          {documents.map(doc => (
+            <ReviewCard key={doc.id} doc={doc}
+              onApprove={d => openReviewModal(d, 'approve')}
+              onReject={d => openReviewModal(d, 'reject')}
+              onDelete={id => handleAction('force-delete', id, 'Document deleted')}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="bg-white border-b border-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-400">
-                <th className="px-8 py-5">Source Material</th>
-                <th className="px-6 py-5">Uploader Origin</th>
-                <th className="px-6 py-5">Verification Matrix</th>
-                <th className="px-6 py-5">Timestamp Hash</th>
-                <th className="px-8 py-5 text-right w-32">Directives</th>
+              <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-5 py-3 text-left">Document</th>
+                <th className="px-4 py-3 text-left">Owner</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Date</th>
+                <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50 bg-white">
-              {loading ? (
-                <tr>
-                  <td colSpan="5" className="px-8 py-16 text-center">
-                    <Spinner className="mx-auto text-violet-500" />
-                  </td>
-                </tr>
-              ) : documents.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="px-8 py-16 text-center text-slate-400 font-medium">
-                    Sector scan complete. No documents detected under this matrix.
-                  </td>
-                </tr>
-              ) : (
-                documents.map((doc) => (
-                  <tr key={doc.id} className="group hover:bg-violet-50/30 transition-colors duration-200">
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-4">
-                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-sm ring-1 ${
-                          doc.file_type === 'pdf' ? 'bg-red-50 text-red-600 ring-red-200' : 
-                          doc.file_type === 'docx' ? 'bg-blue-50 text-blue-600 ring-blue-200' : 
-                          'bg-orange-50 text-orange-600 ring-orange-200'
-                        }`}>
-                           {doc.file_type.toUpperCase()}
-                        </div>
-                        <div className="flex flex-col max-w-50">
-                          <span className="font-bold text-slate-800 truncate" title={doc.file_name}>{doc.file_name}</span>
-                          <span className="text-[11px] font-semibold text-slate-400 tracking-wide">{(doc.file_size / 1024 / 1024).toFixed(2)} MB PAYLOAD</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold text-slate-700">{doc.users?.full_name || 'Anonymous Drop'}</span>
-                        <span className="text-xs font-medium text-slate-400">{doc.users?.email}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest shadow-sm ring-1 ${
-                        doc.processing_status === 'quarantined' ? 'bg-linear-to-r from-amber-100 to-orange-100 text-amber-700 ring-amber-200' :
-                        doc.processing_status === 'processed' ? 'bg-linear-to-r from-emerald-50 to-teal-50 text-emerald-700 ring-emerald-200' :
-                        doc.processing_status === 'failed' ? 'bg-linear-to-r from-rose-50 to-red-50 text-rose-700 ring-rose-200' :
-                        'bg-slate-50 text-blue-700 ring-blue-200'
-                      }`}>
-                        {doc.processing_status}
+            <tbody className="divide-y divide-gray-50">
+              {documents.map(doc => (
+                <tr key={doc.id} className="hover:bg-gray-50/60 transition-colors group">
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[10px] font-bold text-gray-400 border border-gray-200 rounded px-1 py-0.5 uppercase shrink-0">
+                        {doc.file_type}
                       </span>
-                      {doc.copyright_flag && (
-                         <span className="ml-2 inline-flex items-center text-[10px] uppercase font-black tracking-widest text-white bg-rose-500 px-2 py-1.5 rounded-md shadow-sm shadow-rose-500/30">
-                           FLAGGED
-                         </span>
-                      )}
-                      {doc.review_status === 'pending' && (
-                         <span className="ml-2 inline-flex items-center text-[10px] uppercase font-black tracking-widest text-white bg-violet-500 px-2 py-1.5 rounded-md shadow-sm shadow-violet-500/30">
-                           REVIEW PENDING
-                         </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 text-xs font-semibold text-slate-400">
-                      {new Date(doc.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' })}
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <a
-                          href={`/document/${doc.id}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-2 text-slate-400 hover:text-blue-600 focus:bg-blue-100 hover:bg-blue-50 rounded-lg hover:scale-110 active:scale-95 transition-all"
-                          title="Open Viewer Container"
-                        >
-                          <ExternalLink size={16} strokeWidth={2.5} />
-                        </a>
-                        
-                        {doc.processing_status === 'quarantined' && (
-                          <>
-                            <button
-                              onClick={() => handleAction('approve', doc.id, 'Document approved for processing')}
-                              className="p-2 text-emerald-600 bg-emerald-50 shadow-sm ring-1 ring-emerald-200/50 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg hover:scale-110 active:scale-95 transition-all"
-                              title="Bypass Quarantine (Approve)"
-                            >
-                              <CheckCircle size={16} strokeWidth={3} />
-                            </button>
-                            <button
-                              onClick={() => handleAction('reject', doc.id, 'Document rejected')}
-                              className="p-2 text-amber-600 bg-amber-50 shadow-sm ring-1 ring-amber-200/50 hover:bg-amber-100 hover:text-amber-700 rounded-lg hover:scale-110 active:scale-95 transition-all mx-1"
-                              title="Enforce Quarantine (Reject)"
-                            >
-                              <XCircle size={16} strokeWidth={3} />
-                            </button>
-                          </>
+                      <div>
+                        <p className="font-medium text-gray-800 truncate max-w-[220px]" title={doc.file_name}>{doc.file_name}</p>
+                        {doc.flag_reason && (
+                          <p className="text-[11px] text-amber-500 truncate max-w-[200px]" title={doc.flag_reason}>⚠ {doc.flag_reason}</p>
                         )}
-
-                        {doc.review_status === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleAction('review-approve', doc.id, 'Review approved: document unlocked')}
-                              className="p-2 text-emerald-600 bg-emerald-50 shadow-sm ring-1 ring-emerald-200/50 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg hover:scale-110 active:scale-95 transition-all"
-                              title="Approve review request"
-                            >
-                              <CheckCircle size={16} strokeWidth={3} />
-                            </button>
-                            <button
-                              onClick={() => handleAction('review-reject', doc.id, 'Review rejected and penalty applied')}
-                              className="p-2 text-rose-600 bg-rose-50 shadow-sm ring-1 ring-rose-200/50 hover:bg-rose-100 hover:text-rose-700 rounded-lg hover:scale-110 active:scale-95 transition-all"
-                              title="Reject review request (applies penalty)"
-                            >
-                              <XCircle size={16} strokeWidth={3} />
-                            </button>
-                          </>
-                        )}
-                        
-                        <button
-                          onClick={() => handleAction('force-delete', doc.id, 'Document force deleted')}
-                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg hover:scale-110 active:scale-95 transition-all"
-                          title="Erase Trace (Force Delete)"
-                        >
-                          <Trash2 size={16} strokeWidth={2.5} />
-                        </button>
                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <p className="font-medium text-gray-700">{doc.users?.full_name || '—'}</p>
+                    <p className="text-xs text-gray-400">{doc.users?.email}</p>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <div className="flex flex-col gap-1 items-start">
+                      <StatusBadge status={doc.processing_status} />
+                      {doc.copyright_flag && (
+                        <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">
+                          Copyright
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5 text-xs text-gray-400">
+                    {new Date(doc.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => openAdminPdf(doc.id)}
+                        className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="View document">
+                        <Eye size={14} strokeWidth={1.5} />
+                      </button>
+                      {doc.processing_status === 'quarantined' && <>
+                        <button onClick={() => handleAction('approve', doc.id, 'Document approved')}
+                          className="p-1.5 rounded text-green-500 hover:bg-green-50 transition-colors" title="Approve">
+                          <CheckCircle size={14} strokeWidth={2} />
+                        </button>
+                        <button onClick={() => handleAction('reject', doc.id, 'Document rejected')}
+                          className="p-1.5 rounded text-amber-500 hover:bg-amber-50 transition-colors" title="Reject">
+                          <XCircle size={14} strokeWidth={2} />
+                        </button>
+                      </>}
+                      <button onClick={() => handleAction('force-delete', doc.id, 'Document deleted')}
+                        className="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Force delete">
+                        <Trash2 size={14} strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
-        </div>
-
-        {/* Pagination */}
-        <div className="px-8 py-5 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-400 bg-slate-50/50">
-           <p>INDEX {(page - 1) * 20 + (total > 0 ? 1 : 0)} TO {Math.min(page * 20, total)} OF {total}</p>
-          <div className="flex gap-2 text-sm font-medium text-slate-600">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-4 py-2 rounded-lg bg-white shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition-all active:scale-95"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={page * 20 >= total}
-              className="px-4 py-2 rounded-lg bg-white shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition-all active:scale-95"
-            >
-              Forward
-            </button>
+          <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+            <p className="text-xs text-gray-400">{(page-1)*20+(total>0?1:0)}–{Math.min(page*20,total)} of {total}</p>
+            <div className="flex gap-2">
+              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">
+                Prev
+              </button>
+              <button onClick={() => setPage(p => p+1)} disabled={page*20>=total}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">
+                Next
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Review Decision Modal */}
+      {reviewModal && (
+        <Modal isOpen={true} onClose={() => setReviewModal(null)}
+          title={reviewModal.decision === 'approve' ? 'Approve Appeal' : 'Reject Appeal'}
+          maxWidth="560px">
+          <div className="space-y-4">
+
+            {/* Doc summary */}
+            <div className="flex items-center justify-between gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-800 truncate">{reviewModal.doc.file_name}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{reviewModal.doc.users?.full_name} · {reviewModal.doc.users?.email}</p>
+              </div>
+              <button onClick={() => openAdminPdf(reviewModal.doc.id)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 bg-white hover:bg-gray-50 transition-colors whitespace-nowrap">
+                <ExternalLink size={12} /> View PDF
+              </button>
+            </div>
+
+            {/* Flag reason */}
+            {reviewModal.doc.flag_reason && (
+              <div className="flex items-start gap-2.5 border-l-2 border-amber-300 pl-3 py-1.5">
+                <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" strokeWidth={1.5} />
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 mb-0.5">Why it was flagged</p>
+                  <p className="text-sm text-gray-700">{reviewModal.doc.flag_reason}</p>
+                </div>
+              </div>
+            )}
+
+            {/* User's appeal */}
+            <div className="border-l-2 border-gray-200 pl-3 py-1.5">
+              <p className="text-xs font-semibold text-gray-500 mb-1 flex items-center gap-1.5">
+                <MessageSquare size={12} strokeWidth={1.5} /> User's appeal
+              </p>
+              {reviewModal.doc.review_note ? (
+                <p className="text-sm text-gray-700 leading-relaxed">"{reviewModal.doc.review_note}"</p>
+              ) : (
+                <p className="text-sm text-gray-400 italic">No message provided.</p>
+              )}
+            </div>
+
+            {/* Decision note */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">
+                Your decision note <span className="text-red-400">*</span>
+              </label>
+              <textarea rows={3} value={reviewNote} onChange={e => setReviewNote(e.target.value)}
+                placeholder={reviewModal.decision === 'approve'
+                  ? 'e.g. Reviewed — original work confirmed, no violation found.'
+                  : 'e.g. Confirmed copyright match. Violation stands.'}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
+              />
+              <p className="mt-1 text-xs text-gray-400">This note is included in the notification sent to the user.</p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button onClick={() => setReviewModal(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={submitReview} disabled={reviewSubmitting || !reviewNote.trim()}
+                className={`px-5 py-2 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
+                  reviewModal.decision === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                }`}>
+                {reviewSubmitting ? 'Saving…' : reviewModal.decision === 'approve' ? 'Approve & Unlock' : 'Reject & Penalise'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

@@ -56,6 +56,8 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
   };
 
   const canRescan = doc.processing_status === 'quarantined' || doc.processing_status === 'failed';
+  // Review request is only meaningful for copyright-flagged/quarantined docs
+  const canRequestReview = doc.processing_status === 'quarantined' || doc.copyright_flag === true;
   const reviewPending = doc.review_status === 'pending';
 
   const handleRescan = async (e) => {
@@ -114,7 +116,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
             {rescanLoading ? 'Rescanning...' : 'Rescan'}
           </button>
         )}
-        {canRescan && (
+        {canRequestReview && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -173,7 +175,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
                   <RefreshCw size={13} className={rescanLoading ? 'animate-spin' : ''} />
                 </button>
               )}
-              {canRescan && (
+              {canRequestReview && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
