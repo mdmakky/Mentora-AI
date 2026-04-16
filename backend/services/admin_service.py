@@ -142,3 +142,57 @@ def reject_document(admin_id: str, doc_id: str, warn_user_flag: bool = False, su
         action_type = "reject_document_suspend"
 
     log_admin_action(admin_id, action_type, "document", doc_id, details)
+
+
+def decide_review_request(admin_id: str, doc_id: str, decision: str, note: str = None):
+    """Approve or reject a user-submitted review request for a flagged document."""
+    db = get_supabase_admin()
+
+    doc = db.table("documents").select("id, user_id, file_name, review_status, processing_status, doc_category").eq("id", doc_id).single().execute()
+    if not doc.data:
+        raise ValueError("Document not found")
+
+    if doc.data.get("review_status") != "pending":
+        raise ValueError("Document does not have a pending review request")
+
+    decision = (decision or "").strip().lower()
+    if decision not in {"approve", "reject"}:
+        raise ValueError("Invalid review decision")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if decision == "approve":
+        db.table("documents").update({
+            "copyright_flag": False,
+            "flag_reason": None,
+            "processing_status": "ready",
+            "review_requested": False,
+            "review_status": "approved",
+            "review_decided_at": now_iso,
+            "review_decided_by": admin_id,
+            "review_note": note or None,
+        }).eq("id", doc_id).execute()
+
+        log_admin_action(admin_id, "review_approve", "document", doc_id, {
+            "file_name": doc.data.get("file_name"),
+            "note": note,
+        })
+        return {"decision": "approved", "penalty_applied": False}
+
+    # Reject path: keep inaccessible + apply penalty warning.
+    warn_user(admin_id, doc.data["user_id"], f"Review rejected for document: {doc.data.get('file_name')}")
+    db.table("documents").update({
+        "copyright_flag": True,
+        "processing_status": "quarantined",
+        "review_requested": False,
+        "review_status": "rejected",
+        "review_decided_at": now_iso,
+        "review_decided_by": admin_id,
+        "review_note": note or None,
+    }).eq("id", doc_id).execute()
+
+    log_admin_action(admin_id, "review_reject_with_penalty", "document", doc_id, {
+        "file_name": doc.data.get("file_name"),
+        "note": note,
+    })
+    return {"decision": "rejected", "penalty_applied": True}

@@ -4,10 +4,16 @@ from core.database import get_supabase_admin
 from core.dependencies import get_current_admin
 from services.admin_service import (
     get_system_stats, suspend_user, unsuspend_user, reset_user_warnings,
-    verify_user_email, approve_document, reject_document, log_admin_action,
+    verify_user_email, approve_document, reject_document, log_admin_action, decide_review_request,
 )
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+
+class ReviewDecisionRequest(BaseModel):
+    decision: str
+    note: Optional[str] = None
 
 
 @router.get("/stats")
@@ -141,6 +147,21 @@ async def list_quarantined(admin: dict = Depends(get_current_admin)):
     return result.data or []
 
 
+@router.get("/documents/review-requests")
+async def list_review_requests(admin: dict = Depends(get_current_admin)):
+    """List user-requested manual review queue for flagged documents."""
+    db = get_supabase_admin()
+    result = (
+        db.table("documents")
+        .select("*, users(email, full_name)")
+        .eq("review_status", "pending")
+        .eq("is_deleted", False)
+        .order("review_requested_at", desc=True)
+        .execute()
+    )
+    return result.data or []
+
+
 @router.get("/documents")
 async def list_all_documents(
     status: Optional[str] = None,
@@ -184,6 +205,20 @@ async def admin_reject_document(
     try:
         reject_document(admin["id"], doc_id, warn_user, suspend_user_flag)
         return {"message": "Document rejected"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/documents/{doc_id}/review")
+async def admin_decide_review(
+    doc_id: str,
+    payload: ReviewDecisionRequest,
+    admin: dict = Depends(get_current_admin),
+):
+    """Approve or reject a pending user review request. Reject applies penalty."""
+    try:
+        result = decide_review_request(admin["id"], doc_id, payload.decision, payload.note)
+        return {"message": "Review decision applied", **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

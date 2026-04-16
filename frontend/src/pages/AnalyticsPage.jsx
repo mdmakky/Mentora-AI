@@ -17,6 +17,22 @@ const AnalyticsPage = () => {
     fetchDashboard();
   }, [fetchDashboard]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      fetchDashboard();
+    }, 60 * 1000);
+
+    const onVisible = () => {
+      if (!document.hidden) fetchDashboard();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [fetchDashboard]);
+
   if (loading && !dashboardData && weeklyData.length === 0) {
     return (
       <div className="app-content animate-pulse">

@@ -14,12 +14,18 @@ const AdminDocuments = () => {
   const fetchDocuments = async () => {
     try {
       setLoading(true);
-      const queryParams = new URLSearchParams({ page, per_page: 20 });
-      if (statusFilter) queryParams.append('status', statusFilter);
-      
-      const data = await apiClient.get(`/admin/documents?${queryParams.toString()}`);
-      setDocuments(data.documents || []);
-      setTotal(data.total || 0);
+      if (statusFilter === 'review_pending') {
+        const data = await apiClient.get('/admin/documents/review-requests');
+        setDocuments(data || []);
+        setTotal((data || []).length);
+      } else {
+        const queryParams = new URLSearchParams({ page, per_page: 20 });
+        if (statusFilter) queryParams.append('status', statusFilter);
+
+        const data = await apiClient.get(`/admin/documents?${queryParams.toString()}`);
+        setDocuments(data.documents || []);
+        setTotal(data.total || 0);
+      }
     } catch (error) {
       toast.error(error.message || 'Failed to fetch documents');
     } finally {
@@ -40,6 +46,12 @@ const AdminDocuments = () => {
       } else if (action === 'reject') {
         const warnUser = window.confirm('Do you want to add a copyright violation warning to the user\'s profile?');
         await apiClient.put(`/admin/documents/${docId}/reject`, { warn_user: warnUser, suspend_user_flag: false });
+      } else if (action === 'review-approve') {
+        await apiClient.put(`/admin/documents/${docId}/review`, { decision: 'approve', note: 'Approved after manual review' });
+      } else if (action === 'review-reject') {
+        const confirmReject = window.confirm('Reject this request? A penalty warning will be applied to the user.');
+        if (!confirmReject) return;
+        await apiClient.put(`/admin/documents/${docId}/review`, { decision: 'reject', note: 'Rejected after manual review' });
       } else {
         await apiClient.put(`/admin/documents/${docId}/${action}`);
       }
@@ -57,7 +69,7 @@ const AdminDocuments = () => {
       <div className="relative overflow-hidden rounded-3xl bg-white px-8 py-8 shadow-sm ring-1 ring-slate-100 flex items-center justify-between">
         <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
         <div className="relative z-10 flex items-center gap-6">
-           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30">
+           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-violet-500 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30">
             <FileWarning size={32} strokeWidth={2} />
           </div>
           <div>
@@ -72,17 +84,17 @@ const AdminDocuments = () => {
       <div className="rounded-3xl bg-white shadow-lg shadow-slate-200/40 ring-1 ring-slate-100 overflow-hidden">
         {/* Sleek Floating Tabs */}
         <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50 backdrop-blur-sm">
-          {['quarantined', 'pending', 'processed'].map(status => (
+          {['quarantined', 'review_pending', 'pending', 'processed'].map(status => (
             <button
               key={status}
               onClick={() => { setStatusFilter(status); setPage(1); }}
               className={`relative px-5 py-2.5 rounded-full text-[13px] font-bold uppercase tracking-wider transition-all duration-300 ${
                 statusFilter === status 
-                  ? 'bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white shadow-md shadow-violet-500/25 scale-105' 
+                  ? 'bg-linear-to-r from-violet-500 to-fuchsia-600 text-white shadow-md shadow-violet-500/25 scale-105' 
                   : 'bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600 ring-1 ring-slate-200 shadow-sm'
               }`}
             >
-              {status}
+              {status === 'review_pending' ? 'review queue' : status}
               {statusFilter === status && status === 'quarantined' && (
                 <span className="absolute -top-1 -right-1 flex h-3 w-3">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
@@ -141,7 +153,7 @@ const AdminDocuments = () => {
                         }`}>
                            {doc.file_type.toUpperCase()}
                         </div>
-                        <div className="flex flex-col max-w-[200px]">
+                        <div className="flex flex-col max-w-50">
                           <span className="font-bold text-slate-800 truncate" title={doc.file_name}>{doc.file_name}</span>
                           <span className="text-[11px] font-semibold text-slate-400 tracking-wide">{(doc.file_size / 1024 / 1024).toFixed(2)} MB PAYLOAD</span>
                         </div>
@@ -155,9 +167,9 @@ const AdminDocuments = () => {
                     </td>
                     <td className="px-6 py-5">
                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest shadow-sm ring-1 ${
-                        doc.processing_status === 'quarantined' ? 'bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 ring-amber-200' :
-                        doc.processing_status === 'processed' ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 ring-emerald-200' :
-                        doc.processing_status === 'failed' ? 'bg-gradient-to-r from-rose-50 to-red-50 text-rose-700 ring-rose-200' :
+                        doc.processing_status === 'quarantined' ? 'bg-linear-to-r from-amber-100 to-orange-100 text-amber-700 ring-amber-200' :
+                        doc.processing_status === 'processed' ? 'bg-linear-to-r from-emerald-50 to-teal-50 text-emerald-700 ring-emerald-200' :
+                        doc.processing_status === 'failed' ? 'bg-linear-to-r from-rose-50 to-red-50 text-rose-700 ring-rose-200' :
                         'bg-slate-50 text-blue-700 ring-blue-200'
                       }`}>
                         {doc.processing_status}
@@ -165,6 +177,11 @@ const AdminDocuments = () => {
                       {doc.copyright_flag && (
                          <span className="ml-2 inline-flex items-center text-[10px] uppercase font-black tracking-widest text-white bg-rose-500 px-2 py-1.5 rounded-md shadow-sm shadow-rose-500/30">
                            FLAGGED
+                         </span>
+                      )}
+                      {doc.review_status === 'pending' && (
+                         <span className="ml-2 inline-flex items-center text-[10px] uppercase font-black tracking-widest text-white bg-violet-500 px-2 py-1.5 rounded-md shadow-sm shadow-violet-500/30">
+                           REVIEW PENDING
                          </span>
                       )}
                     </td>
@@ -196,6 +213,25 @@ const AdminDocuments = () => {
                               onClick={() => handleAction('reject', doc.id, 'Document rejected')}
                               className="p-2 text-amber-600 bg-amber-50 shadow-sm ring-1 ring-amber-200/50 hover:bg-amber-100 hover:text-amber-700 rounded-lg hover:scale-110 active:scale-95 transition-all mx-1"
                               title="Enforce Quarantine (Reject)"
+                            >
+                              <XCircle size={16} strokeWidth={3} />
+                            </button>
+                          </>
+                        )}
+
+                        {doc.review_status === 'pending' && (
+                          <>
+                            <button
+                              onClick={() => handleAction('review-approve', doc.id, 'Review approved: document unlocked')}
+                              className="p-2 text-emerald-600 bg-emerald-50 shadow-sm ring-1 ring-emerald-200/50 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg hover:scale-110 active:scale-95 transition-all"
+                              title="Approve review request"
+                            >
+                              <CheckCircle size={16} strokeWidth={3} />
+                            </button>
+                            <button
+                              onClick={() => handleAction('review-reject', doc.id, 'Review rejected and penalty applied')}
+                              className="p-2 text-rose-600 bg-rose-50 shadow-sm ring-1 ring-rose-200/50 hover:bg-rose-100 hover:text-rose-700 rounded-lg hover:scale-110 active:scale-95 transition-all"
+                              title="Reject review request (applies penalty)"
                             >
                               <XCircle size={16} strokeWidth={3} />
                             </button>

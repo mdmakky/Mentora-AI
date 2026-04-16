@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     GROQ_MAX_RETRIES_PER_MODEL: int = 2
     GROQ_RETRY_BASE_SECONDS: float = 1.5
 
+    # Embedding fallback
+    ENABLE_LOCAL_EMBEDDING_FALLBACK: bool = True
+    LOCAL_EMBEDDING_BACKEND: str = "auto"  # auto | hash | sentence-transformers
+    LOCAL_EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-MiniLM-L3-v2"
+    LOCAL_EMBEDDING_DEVICE: str = "cpu"
+    LOCAL_EMBEDDING_BATCH_SIZE: int = 8
+
     # App
     APP_NAME: str = "Mentora"
     FRONTEND_URL: str = "http://localhost:5173"

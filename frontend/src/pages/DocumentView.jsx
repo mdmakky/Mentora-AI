@@ -5,6 +5,7 @@ import useDocumentStore from '../stores/documentStore';
 import PDFViewer from '../components/pdf/PDFViewer';
 import ChatPanel from '../components/chat/ChatPanel';
 import Spinner from '../components/ui/Spinner';
+import useStudySessionTracker from '../utils/useStudySessionTracker';
 
 const DocumentView = () => {
   const { docId } = useParams();
@@ -15,6 +16,13 @@ const DocumentView = () => {
   const [loading, setLoading] = useState(true);
   const [targetPage, setTargetPage] = useState(null);
   const { currentDoc, getDocument, getDocumentUrl, clearCurrentDoc } = useDocumentStore();
+
+  useStudySessionTracker({
+    enabled: Boolean(currentDoc?.id),
+    courseId: currentDoc?.course_id || null,
+    documentId: currentDoc?.id || null,
+    sessionType: 'reading',
+  });
 
   useEffect(() => {
     let objectUrl = null;

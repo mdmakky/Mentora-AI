@@ -94,6 +94,30 @@ const useDocumentStore = create(
     }
   },
 
+  rescanDocument: async (docId) => {
+    try {
+      const data = await apiClient.put(`/documents/${docId}/rescan`, {});
+      set((s) => ({
+        documents: s.documents.map((d) => (d.id === docId ? { ...d, ...data } : d)),
+      }));
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to rescan document' };
+    }
+  },
+
+  requestDocumentReview: async (docId, note = '') => {
+    try {
+      const data = await apiClient.post(`/documents/${docId}/review-request`, { note });
+      set((s) => ({
+        documents: s.documents.map((d) => (d.id === docId ? { ...d, ...data } : d)),
+      }));
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to submit review request' };
+    }
+  },
+
   // ─── Folders ────────────────────────────────
   fetchFolders: async (courseId) => {
     try {

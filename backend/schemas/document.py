@@ -51,6 +51,12 @@ class DocumentResponse(BaseModel):
     doc_category: str
     processing_status: str
     copyright_flag: bool = False
+    flag_reason: Optional[str] = None
+    review_requested: bool = False
+    review_status: Optional[str] = None
+    review_note: Optional[str] = None
+    review_requested_at: Optional[str] = None
+    review_decided_at: Optional[str] = None
     chunk_count: int = 0
     is_deleted: bool = False
     created_at: Optional[str] = None

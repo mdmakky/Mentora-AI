@@ -7,6 +7,7 @@ import useChatStore from '../stores/chatStore';
 import useCourseStore from '../stores/courseStore';
 import ChatMessage from '../components/chat/ChatMessage';
 import Spinner from '../components/ui/Spinner';
+import useStudySessionTracker from '../utils/useStudySessionTracker';
 
 const ChatPage = () => {
   const {
@@ -116,6 +117,13 @@ const ChatPage = () => {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const activeCourseInfo = allCourses.find((c) => c.id === activeSession?.course_id);
+
+  useStudySessionTracker({
+    enabled: Boolean(activeSessionId),
+    courseId: activeSession?.course_id || selectedCourse || null,
+    documentId: null,
+    sessionType: 'chat',
+  });
 
   return (
     <div className="flex relative" style={{ height: 'calc(100vh - 64px)' }}>

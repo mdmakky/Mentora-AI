@@ -8,11 +8,40 @@ from services.study_service import calculate_streak, update_daily_streak
 
 router = APIRouter(prefix="/study", tags=["Study Tracking"])
 
+MIN_TRACKED_MINUTES = 1
+MAX_TRACKED_MINUTES = 360
+
+
+def _safe_duration_minutes(started_at_iso: str, ended_at_dt: datetime) -> int:
+    started_at = datetime.fromisoformat(started_at_iso.replace("Z", "+00:00"))
+    duration = int((ended_at_dt - started_at).total_seconds() / 60)
+    duration = max(0, duration)
+    return min(duration, MAX_TRACKED_MINUTES)
+
 
 @router.post("/session/start")
 async def start_session(data: StudySessionStart, user: dict = Depends(get_current_user)):
     """Start a new study session."""
     db = get_supabase_admin()
+
+    # Close any stale open sessions first so users don't accumulate overlapping timers.
+    open_sessions = db.table("study_sessions") \
+        .select("id, started_at") \
+        .eq("user_id", user["id"]) \
+        .is_("ended_at", "null") \
+        .execute()
+
+    user_goal = user.get("study_goal_minutes", 120)
+    for row in (open_sessions.data or []):
+        ended_at = datetime.now(timezone.utc)
+        duration = _safe_duration_minutes(row["started_at"], ended_at)
+        db.table("study_sessions").update({
+            "ended_at": ended_at.isoformat(),
+            "duration_minutes": duration,
+        }).eq("id", row["id"]).eq("user_id", user["id"]).execute()
+        if duration >= MIN_TRACKED_MINUTES:
+            update_daily_streak(user["id"], duration, user_goal)
+
     result = db.table("study_sessions").insert({
         "user_id": user["id"],
         "course_id": data.course_id,
@@ -32,9 +61,11 @@ async def end_session(session_id: str, user: dict = Depends(get_current_user)):
     if not session.data:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    started_at = datetime.fromisoformat(session.data["started_at"].replace("Z", "+00:00"))
+    if session.data.get("ended_at"):
+        return session.data
+
     ended_at = datetime.now(timezone.utc)
-    duration = int((ended_at - started_at).total_seconds() / 60)
+    duration = _safe_duration_minutes(session.data["started_at"], ended_at)
 
     result = db.table("study_sessions").update({
         "ended_at": ended_at.isoformat(),
@@ -43,7 +74,8 @@ async def end_session(session_id: str, user: dict = Depends(get_current_user)):
 
     # Update daily streak
     user_goal = user.get("study_goal_minutes", 120)
-    update_daily_streak(user["id"], duration, user_goal)
+    if duration >= MIN_TRACKED_MINUTES:
+        update_daily_streak(user["id"], duration, user_goal)
 
     return result.data[0]
 

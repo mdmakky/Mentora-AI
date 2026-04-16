@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Body
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
+from datetime import datetime, timezone
 from schemas.document import DocumentUpdate, DocumentResponse
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user, check_upload_allowed
@@ -25,6 +26,36 @@ ALLOWED_TYPES = {
     "image/png": "png",
 }
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+REVIEW_COLUMNS = {
+    "flag_reason",
+    "review_requested",
+    "review_status",
+    "review_note",
+    "review_requested_at",
+    "review_decided_at",
+    "review_decided_by",
+    "rescan_count",
+    "last_rescanned_at",
+}
+
+
+def _is_missing_documents_column_error(exc: Exception) -> bool:
+    msg = str(exc)
+    return "PGRST204" in msg and "documents" in msg and "column" in msg
+
+
+def _strip_review_columns(payload: dict) -> dict:
+    return {k: v for k, v in payload.items() if k not in REVIEW_COLUMNS}
+
+
+def _extract_pages_for_scan(file_bytes: bytes, file_type: str):
+    if file_type == "pdf":
+        return extract_text_from_pdf(file_bytes)
+    if file_type == "docx":
+        return extract_text_from_docx(file_bytes)
+    if file_type == "pptx":
+        return extract_text_from_pptx(file_bytes)
+    return []
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=201)
@@ -83,6 +114,21 @@ async def upload_document(
             file.filename = f"{base_name}.pdf"
             # Re-calculate hash based on the new PDF binary
             file_hash = calculate_file_hash(file_bytes)
+
+            # Re-check duplicates in the same course after conversion changed the binary/hash.
+            dup_after_convert = (
+                db.table("documents")
+                .select("id")
+                .eq("file_hash", file_hash)
+                .eq("user_id", user["id"])
+                .eq("course_id", course_id)
+                .eq("is_deleted", False)
+                .execute()
+            )
+            if dup_after_convert.data:
+                raise HTTPException(status_code=400, detail="This file has already been uploaded to this course")
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to auto-convert document to PDF format: {str(e)}")
 
@@ -110,6 +156,8 @@ async def upload_document(
             pages = extract_text_from_pptx(file_bytes)
         
         is_flagged, flag_reason = run_copyright_check(file_bytes, pages, file_hash, user["id"], db)
+        if is_flagged:
+            print(f"[copyright_check] quarantined doc={file.filename} user={user['id']} course={course_id} reason={flag_reason}")
 
     processing_status = "quarantined" if is_flagged else ("ready" if doc_category == "question_paper" else "pending")
 
@@ -129,10 +177,23 @@ async def upload_document(
         "doc_category": doc_category,
         "processing_status": processing_status,
         "copyright_flag": is_flagged,
+        "flag_reason": flag_reason if is_flagged else None,
+        "review_requested": False,
+        "review_status": "none",
+        "review_note": None,
+        "review_requested_at": None,
+        "review_decided_at": None,
+        "review_decided_by": None,
         "file_hash": file_hash,
     }
 
-    result = db.table("documents").insert(doc_data).execute()
+    try:
+        result = db.table("documents").insert(doc_data).execute()
+    except Exception as e:
+        if _is_missing_documents_column_error(e):
+            result = db.table("documents").insert(_strip_review_columns(doc_data)).execute()
+        else:
+            raise
 
     # If not quarantined, start RAG processing pipeline (skip for question_paper)
     if not is_flagged and doc_category != "question_paper":
@@ -140,6 +201,147 @@ async def upload_document(
             process_document_pipeline,
             doc_id, course_id, user["id"], file_bytes, file_type, file.filename,
         )
+
+    return result.data[0]
+
+
+@router.put("/{doc_id}/rescan", response_model=DocumentResponse)
+async def rescan_document(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    user: dict = Depends(get_current_user),
+):
+    """Re-run copyright checks on a flagged/failed document."""
+    db = get_supabase_admin()
+
+    doc = db.table("documents") \
+        .select("*") \
+        .eq("id", doc_id) \
+        .eq("user_id", user["id"]) \
+        .eq("is_deleted", False) \
+        .single() \
+        .execute()
+
+    if not doc.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    row = doc.data
+    if row.get("doc_category") == "question_paper":
+        qp_update = {
+            "processing_status": "ready",
+            "copyright_flag": False,
+            "flag_reason": None,
+            "review_requested": False,
+            "review_status": "none",
+            "review_note": None,
+            "review_requested_at": None,
+            "review_decided_at": None,
+            "review_decided_by": None,
+            "rescan_count": (row.get("rescan_count") or 0) + 1,
+            "last_rescanned_at": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            result = db.table("documents").update(qp_update).eq("id", doc_id).eq("user_id", user["id"]).execute()
+        except Exception as e:
+            if _is_missing_documents_column_error(e):
+                result = db.table("documents").update(_strip_review_columns(qp_update)).eq("id", doc_id).eq("user_id", user["id"]).execute()
+            else:
+                raise
+        return result.data[0]
+
+    try:
+        file_bytes = db.storage.from_("mentora-docs").download(row.get("cloudinary_public_id"))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not fetch file for rescan: {e}")
+
+    pages = _extract_pages_for_scan(file_bytes, row.get("file_type", "pdf"))
+    is_flagged, flag_reason = run_copyright_check(file_bytes, pages, row.get("file_hash"), user["id"], db)
+
+    update_data = {
+        "copyright_flag": is_flagged,
+        "flag_reason": flag_reason if is_flagged else None,
+        "review_requested": False,
+        "review_status": "none",
+        "review_note": None,
+        "review_requested_at": None,
+        "review_decided_at": None,
+        "review_decided_by": None,
+        "rescan_count": (row.get("rescan_count") or 0) + 1,
+        "last_rescanned_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if is_flagged:
+        update_data["processing_status"] = "quarantined"
+    else:
+        update_data["processing_status"] = "pending"
+
+    try:
+        result = db.table("documents").update(update_data).eq("id", doc_id).eq("user_id", user["id"]).execute()
+    except Exception as e:
+        if _is_missing_documents_column_error(e):
+            result = db.table("documents").update(_strip_review_columns(update_data)).eq("id", doc_id).eq("user_id", user["id"]).execute()
+        else:
+            raise
+    updated = result.data[0]
+
+    if not is_flagged:
+        background_tasks.add_task(
+            process_document_pipeline,
+            doc_id,
+            row.get("course_id"),
+            user["id"],
+            file_bytes,
+            row.get("file_type", "pdf"),
+            row.get("file_name", "document.pdf"),
+        )
+
+    return updated
+
+
+@router.post("/{doc_id}/review-request", response_model=DocumentResponse)
+async def request_document_review(
+    doc_id: str,
+    note: str = Body(default="", embed=True),
+    user: dict = Depends(get_current_user),
+):
+    """Submit a manual admin review request for a flagged document."""
+    db = get_supabase_admin()
+    doc = db.table("documents") \
+        .select("id, processing_status, copyright_flag, review_status") \
+        .eq("id", doc_id) \
+        .eq("user_id", user["id"]) \
+        .eq("is_deleted", False) \
+        .single() \
+        .execute()
+
+    if not doc.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not doc.data.get("copyright_flag") and doc.data.get("processing_status") != "quarantined":
+        raise HTTPException(status_code=400, detail="Only flagged documents can be sent for manual review")
+
+    if doc.data.get("review_status") == "pending":
+        raise HTTPException(status_code=400, detail="Review request already pending")
+
+    cleaned_note = (note or "").strip()[:500]
+    review_update = {
+        "review_requested": True,
+        "review_status": "pending",
+        "review_note": cleaned_note or None,
+        "review_requested_at": datetime.now(timezone.utc).isoformat(),
+        "review_decided_at": None,
+        "review_decided_by": None,
+    }
+
+    try:
+        result = db.table("documents").update(review_update).eq("id", doc_id).eq("user_id", user["id"]).execute()
+    except Exception as e:
+        if _is_missing_documents_column_error(e):
+            raise HTTPException(
+                status_code=409,
+                detail="Database migration required for review requests. Run database/document_review_flow_migration.sql.",
+            )
+        raise
 
     return result.data[0]
 

@@ -1,5 +1,10 @@
 import json
 from typing import List, Optional
+import time
+import re
+import hashlib
+import math
+from functools import lru_cache
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from google import genai
 from core.config import get_settings
@@ -9,6 +14,20 @@ settings = get_settings()
 genai_client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSION = 768
+EMBEDDING_BATCH_SIZE = 24
+EMBEDDING_MAX_RETRIES = 2
+LOCAL_EMBEDDING_BATCH_SIZE = max(1, settings.LOCAL_EMBEDDING_BATCH_SIZE)
+
+_local_model_unavailable_reason: Optional[str] = None
+
+_TOKEN_RE = re.compile(r"[a-z0-9_]+")
+_HASH_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "if", "then", "else", "when", "while",
+    "for", "to", "of", "in", "on", "at", "by", "from", "with", "without", "as",
+    "is", "are", "was", "were", "be", "been", "being", "do", "does", "did", "can",
+    "could", "should", "would", "will", "just", "than", "that", "this", "these", "those",
+    "it", "its", "into", "about", "over", "under", "up", "down", "out", "not",
+}
 
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=800,
@@ -48,56 +67,289 @@ def chunk_document(pages: List[dict], doc_id: str, doc_name: str) -> List[dict]:
 
 def generate_embedding(text: str) -> List[float]:
     """Generate embedding using Google Gemini embedding model."""
-    result = genai_client.models.embed_content(
-        model=EMBEDDING_MODEL,
-        contents=text,
-        config={"output_dimensionality": EMBEDDING_DIMENSION},
+    return _embed_batch([text])[0]
+
+
+def _is_quota_exhausted_error(error: Exception) -> bool:
+    msg = str(error).upper()
+    quota_tokens = [
+        "RESOURCE_EXHAUSTED",
+        "EMBED_CONTENT_FREE_TIER_REQUESTS",
+        "EMBEDCONTENTREQUESTSPERDAY",
+        "429",
+        "QUOTA EXCEEDED",
+    ]
+    return any(token in msg for token in quota_tokens)
+
+
+def _embed_batch_with_retry(texts: List[str]) -> List[List[float]]:
+    """Embed a batch of chunk texts, retrying transient failures briefly."""
+    last_error: Optional[Exception] = None
+
+    for attempt in range(EMBEDDING_MAX_RETRIES + 1):
+        try:
+            result = genai_client.models.embed_content(
+                model=EMBEDDING_MODEL,
+                contents=texts,
+                config={"output_dimensionality": EMBEDDING_DIMENSION},
+            )
+
+            embeddings = getattr(result, "embeddings", None) or []
+            if len(embeddings) != len(texts):
+                raise ValueError(
+                    f"Embedding response size mismatch: expected {len(texts)} got {len(embeddings)}"
+                )
+
+            return [item.values for item in embeddings]
+        except Exception as e:
+            last_error = e
+            if _is_quota_exhausted_error(e):
+                raise
+
+            if attempt >= EMBEDDING_MAX_RETRIES:
+                break
+
+            wait_seconds = 1.5 * (2 ** attempt)
+            time.sleep(wait_seconds)
+
+    raise Exception(f"Embedding batch failed after retries: {last_error}")
+
+
+@lru_cache(maxsize=1)
+def _get_local_embedding_model():
+    """Lazy-load local sentence-transformers model only when fallback is needed."""
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer(
+        settings.LOCAL_EMBEDDING_MODEL,
+        device=settings.LOCAL_EMBEDDING_DEVICE or "cpu",
     )
-    return result.embeddings[0].values
+    return model
+
+
+def _is_memory_pressure_error(error: Exception) -> bool:
+    msg = str(error).lower()
+    markers = [
+        "out of memory",
+        "cannot allocate memory",
+        "killed",
+        "std::bad_alloc",
+        "oom",
+    ]
+    return any(marker in msg for marker in markers)
+
+
+def _encode_sentence_transformer_batched(model, texts: List[str]) -> List[List[float]]:
+    vectors = []
+    for i in range(0, len(texts), LOCAL_EMBEDDING_BATCH_SIZE):
+        window = texts[i:i + LOCAL_EMBEDDING_BATCH_SIZE]
+        batch_vectors = model.encode(
+            window,
+            batch_size=LOCAL_EMBEDDING_BATCH_SIZE,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+            normalize_embeddings=True,
+        )
+        vectors.extend(batch_vectors)
+    return vectors
+
+
+def _embed_hash(text: str) -> List[float]:
+    """Lightweight lexical embedding for low-memory deployments.
+
+    This is a feature-hashing vectorizer, not a neural semantic model.
+    It encodes normalized tokens, phrase patterns, and token-shape hints.
+    """
+    tokens = _TOKEN_RE.findall((text or "").lower())
+    vec = [0.0] * EMBEDDING_DIMENSION
+
+    if not tokens:
+        return vec
+
+    normalized = []
+    for token in tokens:
+        t = token
+        if len(t) > 4 and t.endswith("ies"):
+            t = t[:-3] + "y"
+        elif len(t) > 5 and t.endswith("ing"):
+            t = t[:-3]
+        elif len(t) > 4 and t.endswith("ed"):
+            t = t[:-2]
+        elif len(t) > 3 and t.endswith("es"):
+            t = t[:-2]
+        elif len(t) > 3 and t.endswith("s"):
+            t = t[:-1]
+        normalized.append(t)
+
+    features = []
+    for idx, token in enumerate(normalized):
+        base_weight = 0.2 if token in _HASH_STOPWORDS else 1.0
+
+        # Unigram features carry most lexical signal.
+        features.append((f"tok:{token}", base_weight))
+
+        # Prefix/suffix features improve robustness for related word forms.
+        if len(token) >= 4:
+            features.append((f"pre:{token[:3]}", 0.35 * base_weight))
+            features.append((f"suf:{token[-3:]}", 0.35 * base_weight))
+
+        # Character trigrams improve matching across inflected/derived forms.
+        if len(token) >= 6:
+            trigrams = {token[j:j + 3] for j in range(len(token) - 2)}
+            for trigram in trigrams:
+                features.append((f"tri:{trigram}", 0.12 * base_weight))
+
+        # Neighbor bigrams capture short phrase structure.
+        if idx + 1 < len(normalized):
+            nxt = normalized[idx + 1]
+            features.append((f"bi:{token}_{nxt}", 0.8 * base_weight))
+
+        # Number marker helps retrieval for formula-like and numbered content.
+        if any(ch.isdigit() for ch in token):
+            features.append(("shape:has_digit", 0.5))
+
+    for feature, weight in features:
+        digest = hashlib.blake2b(feature.encode("utf-8"), digest_size=8).digest()
+        value = int.from_bytes(digest, "big", signed=False)
+
+        # Two hashed coordinates reduce collision impact versus a single bucket.
+        idx_1 = value % EMBEDDING_DIMENSION
+        idx_2 = (value >> 21) % EMBEDDING_DIMENSION
+        sign_1 = -1.0 if ((value >> 8) & 1) else 1.0
+        sign_2 = -1.0 if ((value >> 29) & 1) else 1.0
+
+        vec[idx_1] += sign_1 * weight
+        vec[idx_2] += sign_2 * (0.5 * weight)
+
+    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+    return [v / norm for v in vec]
+
+
+def _embed_batch_hash(texts: List[str]) -> List[List[float]]:
+    return [_embed_hash(text) for text in texts]
+
+
+def _embed_batch_local(texts: List[str]) -> List[List[float]]:
+    global _local_model_unavailable_reason
+
+    backend = (settings.LOCAL_EMBEDDING_BACKEND or "auto").strip().lower()
+
+    if backend not in {"auto", "hash", "sentence-transformers"}:
+        print(f"[embedding] invalid LOCAL_EMBEDDING_BACKEND={settings.LOCAL_EMBEDDING_BACKEND}; using hash")
+        return _embed_batch_hash(texts)
+
+    if backend == "hash":
+        return _embed_batch_hash(texts)
+
+    prefer_sentence_transformers = backend in {"auto", "sentence-transformers"}
+
+    if prefer_sentence_transformers and not _local_model_unavailable_reason:
+        try:
+            model = _get_local_embedding_model()
+            vectors = _encode_sentence_transformer_batched(model, texts)
+
+            out: List[List[float]] = []
+            for vec in vectors:
+                values = vec.tolist()
+                if len(values) == EMBEDDING_DIMENSION:
+                    out.append(values)
+                    continue
+
+                # Dimension align for pgvector schema compatibility (pad/truncate).
+                if len(values) > EMBEDDING_DIMENSION:
+                    values = values[:EMBEDDING_DIMENSION]
+                else:
+                    values = values + [0.0] * (EMBEDDING_DIMENSION - len(values))
+                out.append(values)
+            return out
+        except Exception as st_error:
+            # Avoid repeated heavy retries on constrained boxes once local model fails.
+            if backend == "sentence-transformers" or _is_memory_pressure_error(st_error):
+                _local_model_unavailable_reason = str(st_error)
+
+            print(
+                "[embedding] sentence-transformers unavailable, "
+                f"falling back to hash: {st_error}"
+            )
+
+            if backend == "sentence-transformers":
+                # Strict mode requested; still degrade to hash to keep ingestion/search alive.
+                return _embed_batch_hash(texts)
+
+    if _local_model_unavailable_reason and backend == "auto":
+        # Keep logs concise after first failure while preserving behavior.
+        return _embed_batch_hash(texts)
+
+    return _embed_batch_hash(texts)
+
+
+def _embed_batch(texts: List[str]) -> List[List[float]]:
+    """Primary Gemini embedding with automatic local fallback on failure."""
+    try:
+        return _embed_batch_with_retry(texts)
+    except Exception as gemini_error:
+        if not settings.ENABLE_LOCAL_EMBEDDING_FALLBACK:
+            raise
+
+        print(f"[embedding] Gemini failed, using local fallback: {gemini_error}")
+        try:
+            return _embed_batch_local(texts)
+        except Exception as local_error:
+            raise Exception(f"Gemini embedding failed: {gemini_error}; local fallback failed: {local_error}")
 
 
 def generate_query_embedding(text: str) -> List[float]:
     """Generate embedding for a query."""
-    result = genai_client.models.embed_content(
-        model=EMBEDDING_MODEL,
-        contents=text,
-        config={"output_dimensionality": EMBEDDING_DIMENSION},
-    )
-    return result.embeddings[0].values
+    return _embed_batch([text])[0]
 
 
 async def store_chunks_with_embeddings(
     chunks: List[dict],
     course_id: str,
     user_id: str,
-) -> int:
+) -> dict:
     """Store document chunks with their embeddings in the database."""
     db = get_supabase_admin()
     stored_count = 0
+    failed_count = 0
+    quota_exhausted = False
+    last_error = None
 
-    for chunk in chunks:
+    for i in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
+        batch = chunks[i:i + EMBEDDING_BATCH_SIZE]
         try:
-            embedding = generate_embedding(chunk["content"])
+            embeddings = _embed_batch([c["content"] for c in batch])
 
-            db.table("document_chunks").insert({
-                "document_id": chunk["document_id"],
-                "course_id": course_id,
-                "user_id": user_id,
-                "chunk_index": chunk["chunk_index"],
-                "content": chunk["content"],
-                "page_number": chunk["page_number"],
-                "section_title": chunk.get("section_title"),
-                "slide_number": chunk.get("slide_number"),
-                "embedding": embedding,
-                "token_count": chunk.get("token_count", 0),
-            }).execute()
+            for chunk, embedding in zip(batch, embeddings):
+                db.table("document_chunks").insert({
+                    "document_id": chunk["document_id"],
+                    "course_id": course_id,
+                    "user_id": user_id,
+                    "chunk_index": chunk["chunk_index"],
+                    "content": chunk["content"],
+                    "page_number": chunk["page_number"],
+                    "section_title": chunk.get("section_title"),
+                    "slide_number": chunk.get("slide_number"),
+                    "embedding": embedding,
+                    "token_count": chunk.get("token_count", 0),
+                }).execute()
 
-            stored_count += 1
+                stored_count += 1
         except Exception as e:
-            print(f"Error storing chunk {chunk['chunk_index']}: {e}")
-            continue
+            last_error = e
+            failed_count += len(batch)
+            first_chunk_idx = batch[0].get("chunk_index") if batch else "?"
+            print(f"Error storing chunk batch starting at {first_chunk_idx}: {e}")
+            if _is_quota_exhausted_error(e):
+                quota_exhausted = True
+                break
 
-    return stored_count
+    return {
+        "stored_count": stored_count,
+        "failed_count": failed_count,
+        "quota_exhausted": quota_exhausted,
+        "error": str(last_error) if last_error else None,
+    }
 
 
 async def search_similar_chunks(
@@ -167,14 +419,25 @@ async def process_document_pipeline(
         chunks = chunk_document(pages, doc_id, file_name)
 
         # Store chunks with embeddings
-        stored_count = await store_chunks_with_embeddings(chunks, course_id, user_id)
+        store_result = await store_chunks_with_embeddings(chunks, course_id, user_id)
+        stored_count = store_result["stored_count"]
+        failed_count = store_result["failed_count"]
+        quota_exhausted = store_result["quota_exhausted"]
 
-        if stored_count == 0:
+        if stored_count == 0 or failed_count > 0:
+            fail_reason = "quota_exhausted" if quota_exhausted else "embedding_failed"
+            # Remove partial chunk writes so failed documents don't pollute retrieval.
+            db.table("document_chunks").delete().eq("document_id", doc_id).eq("user_id", user_id).execute()
             db.table("documents").update({
                 "processing_status": "failed",
                 "chunk_count": 0,
                 "page_count": len(pages),
             }).eq("id", doc_id).execute()
+            if quota_exhausted:
+                print(
+                    f"[rag_pipeline] embedding quota exhausted for doc={doc_id}; "
+                    f"stored={stored_count}, failed={failed_count}"
+                )
             return
 
         # Update document status

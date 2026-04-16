@@ -20,3 +20,10 @@ python-docx==1.1.0
 bcrypt==4.0.1
 google-genai>=1.5.0
 google-auth>=2.39.0
+
+# CPU-only PyTorch index for low-memory, no-GPU Linux servers
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Local semantic fallback stack (Gemini -> MiniLM -> hash)
+torch==2.11.0+cpu ; platform_system == "Linux"
+sentence-transformers==3.0.1
