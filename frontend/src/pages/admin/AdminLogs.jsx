@@ -82,56 +82,103 @@ const AdminLogs = () => {
 
       {/* Table */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              <th className="px-5 py-3 text-left">Admin</th>
-              <th className="px-4 py-3 text-left">Action</th>
-              <th className="px-4 py-3 text-left">Target</th>
-              <th className="px-5 py-3 text-right">Time</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {loading ? (
-              <tr><td colSpan="4" className="py-16 text-center"><Spinner className="mx-auto text-gray-400" /></td></tr>
-            ) : logs.length === 0 ? (
-              <tr><td colSpan="4" className="py-16 text-center text-sm text-gray-400">No activity logged yet.</td></tr>
-            ) : logs.map(log => {
-              const action = getAction(log.action_type);
-              return (
-                <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-800 text-white text-[11px] font-bold">
-                        {log.users?.email?.charAt(0)?.toUpperCase() || 'A'}
+        {loading ? (
+          <div className="py-24 flex justify-center"><Spinner className="text-gray-400" /></div>
+        ) : logs.length === 0 ? (
+          <div className="py-24 flex flex-col items-center gap-3 text-center px-6">
+            <Activity size={36} className="text-gray-200" strokeWidth={1.5} />
+            <p className="text-sm font-medium text-gray-400">No activity logged yet</p>
+            <p className="text-xs text-gray-300">{filterType ? 'No entries match this filter. Try selecting a different action.' : 'Admin actions will appear here.'}</p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    <th className="px-5 py-3 text-left">Admin</th>
+                    <th className="px-4 py-3 text-left">Action</th>
+                    <th className="px-4 py-3 text-left">Target</th>
+                    <th className="px-5 py-3 text-right">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {logs.map(log => {
+                    const action = getAction(log.action_type);
+                    return (
+                      <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-800 text-white text-[11px] font-bold">
+                              {log.users?.email?.charAt(0)?.toUpperCase() || 'A'}
+                            </div>
+                            <p className="text-sm text-gray-700 font-medium">{log.users?.email || 'Unknown'}</p>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex items-center text-[11px] font-semibold border rounded px-2 py-0.5 ${action.color}`}>
+                            {action.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <p className="text-xs text-gray-500 capitalize">{log.target_type || '—'}</p>
+                          {log.details && (
+                            <p className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[200px]" title={JSON.stringify(log.details)}>
+                              {typeof log.details === 'string' ? log.details : log.details?.reason || log.details?.note || ''}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                            <Clock size={11} strokeWidth={1.5} />
+                            {new Date(log.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {logs.map(log => {
+                const action = getAction(log.action_type);
+                const detail = log.details && (typeof log.details === 'string' ? log.details : log.details?.reason || log.details?.note || '');
+                return (
+                  <div key={log.id} className="px-4 py-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-800 text-white text-xs font-bold">
+                          {log.users?.email?.charAt(0)?.toUpperCase() || 'A'}
+                        </div>
+                        <p className="text-sm font-medium text-gray-700 truncate">{log.users?.email || 'Unknown'}</p>
                       </div>
-                      <p className="text-sm text-gray-700 font-medium">{log.users?.email || 'Unknown'}</p>
+                      <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 shrink-0 mt-1">
+                        <Clock size={10} strokeWidth={1.5} />
+                        {new Date(log.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <span className={`inline-flex items-center text-[11px] font-semibold border rounded px-2 py-0.5 capitalize ${action.color}`}>
-                      {action.label}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <p className="text-xs text-gray-500 capitalize">{log.target_type || '—'}</p>
-                    {log.details && (
-                      <p className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[200px]" title={JSON.stringify(log.details)}>
-                        {typeof log.details === 'string' ? log.details : log.details?.reason || log.details?.note || ''}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 text-right">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-                      <Clock size={11} strokeWidth={1.5} />
-                      {new Date(log.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`inline-flex items-center text-[11px] font-semibold border rounded px-2 py-0.5 ${action.color}`}>
+                        {action.label}
+                      </span>
+                      {log.target_type && (
+                        <span className="text-[11px] text-gray-400 capitalize">{log.target_type}</span>
+                      )}
+                    </div>
+                    {detail ? (
+                      <p className="text-[11px] text-gray-400 leading-relaxed">{detail}</p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
           <p className="text-xs text-gray-400">{(page-1)*25+(total>0?1:0)}–{Math.min(page*25,total)} of {total}</p>
           <div className="flex gap-2">

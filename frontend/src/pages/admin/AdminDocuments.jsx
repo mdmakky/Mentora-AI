@@ -145,7 +145,7 @@ const AdminDocuments = () => {
   const [reviewNote, setReviewNote] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // { docId }
-  const [warnConfirm, setWarnConfirm] = useState(null);    // { docId }
+  const [rejectModal, setRejectModal] = useState(null);    // { docId, msg }
 
   useEffect(() => { setStatusFilter(tabFromUrl); setPage(1); }, [tabFromUrl]);
 
@@ -196,7 +196,7 @@ const AdminDocuments = () => {
         setDeleteConfirm({ docId, msg });
         return;
       } else if (action === 'reject') {
-        setWarnConfirm({ docId, msg });
+        setRejectModal({ docId, msg });
         return;
       } else {
         await apiClient.put(`/admin/documents/${docId}/${action}`);
@@ -221,16 +221,16 @@ const AdminDocuments = () => {
     }
   };
 
-  const confirmRejectWithWarn = async (warnUser) => {
-    if (!warnConfirm) return;
+  const confirmReject = async (warnUser) => {
+    if (!rejectModal) return;
     try {
-      await apiClient.put(`/admin/documents/${warnConfirm.docId}/reject`, { warn_user: warnUser, suspend_user_flag: false });
-      toast.success(warnConfirm.msg || 'Document rejected');
+      await apiClient.put(`/admin/documents/${rejectModal.docId}/reject`, { warn_user: warnUser, suspend_user_flag: false });
+      toast.success(rejectModal.msg || 'Document rejected');
       fetchDocuments();
     } catch (e) {
       toast.error(e.message || 'Reject failed');
     } finally {
-      setWarnConfirm(null);
+      setRejectModal(null);
     }
   };
 
@@ -293,86 +293,95 @@ const AdminDocuments = () => {
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                <th className="px-5 py-3 text-left">Document</th>
-                <th className="px-4 py-3 text-left">Owner</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">Date</th>
-                <th className="px-5 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {documents.map(doc => (
-                <tr key={doc.id} className="hover:bg-gray-50/60 transition-colors group">
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[10px] font-bold text-gray-400 border border-gray-200 rounded px-1 py-0.5 uppercase shrink-0">
-                        {doc.file_type}
-                      </span>
-                      <div>
-                        <p className="font-medium text-gray-800 truncate max-w-[220px]" title={doc.file_name}>{doc.file_name}</p>
-                        {doc.flag_reason && (
-                          <p className="text-[11px] text-amber-500 truncate max-w-[200px]" title={doc.flag_reason}>⚠ {doc.flag_reason}</p>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <p className="font-medium text-gray-700">{doc.users?.full_name || '—'}</p>
-                    <p className="text-xs text-gray-400">{doc.users?.email}</p>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-col gap-1 items-start">
-                      <StatusBadge status={doc.processing_status} />
-                      {doc.copyright_flag && (
-                        <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">
-                          Copyright
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5 text-xs text-gray-400">
-                    {new Date(doc.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => openAdminPdf(doc.id)}
-                        className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="View document">
-                        <Eye size={14} strokeWidth={1.5} />
-                      </button>
-                      {doc.processing_status === 'quarantined' && <>
-                        <button onClick={() => handleAction('approve', doc.id, 'Document approved')}
-                          className="p-1.5 rounded text-green-500 hover:bg-green-50 transition-colors" title="Approve">
-                          <CheckCircle size={14} strokeWidth={2} />
-                        </button>
-                        <button onClick={() => handleAction('reject', doc.id, 'Document rejected')}
-                          className="p-1.5 rounded text-amber-500 hover:bg-amber-50 transition-colors" title="Reject">
-                          <XCircle size={14} strokeWidth={2} />
-                        </button>
-                      </>}
-                      <button onClick={() => handleAction('force-delete', doc.id, 'Document deleted')}
-                        className="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Force delete">
-                        <Trash2 size={14} strokeWidth={1.5} />
-                      </button>
-                    </div>
-                  </td>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-left">Document</th>
+                  <th className="px-4 py-3 text-left">Owner</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {documents.map(doc => (
+                  <tr key={doc.id} className="hover:bg-gray-50/60 transition-colors group">
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[10px] font-bold text-gray-400 border border-gray-200 rounded px-1 py-0.5 uppercase shrink-0">{doc.file_type}</span>
+                        <div>
+                          <p className="font-medium text-gray-800 truncate max-w-[220px]" title={doc.file_name}>{doc.file_name}</p>
+                          {doc.flag_reason && <p className="text-[11px] text-amber-500 truncate max-w-[200px]" title={doc.flag_reason}>⚠ {doc.flag_reason}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <p className="font-medium text-gray-700">{doc.users?.full_name || '—'}</p>
+                      <p className="text-xs text-gray-400">{doc.users?.email}</p>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-col gap-1 items-start">
+                        <StatusBadge status={doc.processing_status} />
+                        {doc.copyright_flag && <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">Copyright</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3.5 text-xs text-gray-400">
+                      {new Date(doc.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center justify-end gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openAdminPdf(doc.id)} className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="View document"><Eye size={14} strokeWidth={1.5} /></button>
+                        {doc.processing_status === 'quarantined' && <>
+                          <button onClick={() => handleAction('approve', doc.id, 'Document approved')} className="p-1.5 rounded text-green-500 hover:bg-green-50 transition-colors" title="Approve"><CheckCircle size={14} strokeWidth={2} /></button>
+                          <button onClick={() => handleAction('reject', doc.id, 'Document rejected')} className="p-1.5 rounded text-amber-500 hover:bg-amber-50 transition-colors" title="Reject"><XCircle size={14} strokeWidth={2} /></button>
+                        </>}
+                        <button onClick={() => handleAction('force-delete', doc.id, 'Document deleted')} className="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Force delete"><Trash2 size={14} strokeWidth={1.5} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            {documents.map(doc => (
+              <div key={doc.id} className="px-4 py-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className="text-[10px] font-bold text-gray-400 border border-gray-200 rounded px-1 py-0.5 uppercase shrink-0">{doc.file_type}</span>
+                      <p className="font-semibold text-gray-800 text-sm truncate">{doc.file_name}</p>
+                    </div>
+                    <p className="text-xs text-gray-400">{doc.users?.full_name || '—'} · {doc.users?.email}</p>
+                    {doc.flag_reason && <p className="text-[11px] text-amber-500 mt-0.5">⚠ {doc.flag_reason}</p>}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openAdminPdf(doc.id)} className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors" title="View"><Eye size={15} strokeWidth={1.5} /></button>
+                    {doc.processing_status === 'quarantined' && <>
+                      <button onClick={() => handleAction('approve', doc.id, 'Document approved')} className="p-1.5 rounded text-green-500 hover:bg-green-50 transition-colors" title="Approve"><CheckCircle size={15} strokeWidth={2} /></button>
+                      <button onClick={() => handleAction('reject', doc.id, 'Document rejected')} className="p-1.5 rounded text-amber-500 hover:bg-amber-50 transition-colors" title="Reject"><XCircle size={15} strokeWidth={2} /></button>
+                    </>}
+                    <button onClick={() => handleAction('force-delete', doc.id, 'Document deleted')} className="p-1.5 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete"><Trash2 size={15} strokeWidth={1.5} /></button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <StatusBadge status={doc.processing_status} />
+                  {doc.copyright_flag && <span className="text-[10px] font-semibold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 uppercase">Copyright</span>}
+                  <span className="text-[11px] text-gray-400">{new Date(doc.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
             <p className="text-xs text-gray-400">{(page-1)*20+(total>0?1:0)}–{Math.min(page*20,total)} of {total}</p>
             <div className="flex gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">
-                Prev
-              </button>
-              <button onClick={() => setPage(p => p+1)} disabled={page*20>=total}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">
-                Next
-              </button>
+              <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">Prev</button>
+              <button onClick={() => setPage(p => p+1)} disabled={page*20>=total} className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">Next</button>
             </div>
           </div>
         </div>
@@ -461,16 +470,30 @@ const AdminDocuments = () => {
         confirmVariant="danger"
       />
 
-      {/* Reject with warn confirm */}
-      <ConfirmDialog
-        isOpen={!!warnConfirm}
-        onClose={() => confirmRejectWithWarn(false)}
-        onConfirm={() => confirmRejectWithWarn(true)}
-        title="Add copyright warning to user?"
-        message="Clicking 'Add Warning' will reject the document and add a copyright violation warning to the user's account."
-        confirmLabel="Add Warning"
-        confirmVariant="warning"
-      />
+      {/* Reject modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setRejectModal(null); }}>
+          <div className="absolute inset-0 bg-slate-900/45 backdrop-blur-[2px]" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 px-6 pt-7 pb-6">
+            <h3 className="text-lg font-bold text-slate-900 mb-1.5">Reject document?</h3>
+            <p className="text-sm text-slate-500 mb-5">Choose whether to also add a copyright violation warning to the user's account. At 3 warnings the account is automatically suspended.</p>
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <button onClick={() => setRejectModal(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+                Cancel
+              </button>
+              <button onClick={() => confirmReject(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
+                Reject only
+              </button>
+              <button onClick={() => confirmReject(true)}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-sm font-semibold text-white transition">
+                Reject + Warn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
