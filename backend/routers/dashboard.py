@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import date, timedelta
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user
-from services.study_service import calculate_streak
+from services.study_service import calculate_streak, reconcile_recent_streaks
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -13,6 +13,7 @@ async def get_user_stats(user: dict = Depends(get_current_user)):
     """Get aggregated dashboard statistics for the current user."""
     db = get_supabase_admin()
     user_id = user["id"]
+    reconcile_recent_streaks(user_id, user.get("study_goal_minutes", 120))
 
     # Document count
     docs = db.table("documents").select("id", count="exact").eq("user_id", user_id).neq("is_deleted", True).execute()

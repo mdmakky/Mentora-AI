@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Mail, GraduationCap, Building2, Camera, Lock, CheckCircle2, XCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, GraduationCap, Building2, Camera, Lock, CheckCircle2, XCircle, Loader2, Eye, EyeOff, Target } from 'lucide-react';
 import useAuthStore from '../stores/authStore';
 import toast from 'react-hot-toast';
 import { apiClient } from '../lib/apiClient';
@@ -12,6 +12,7 @@ const ProfilePage = () => {
     full_name: user?.full_name || '',
     university: user?.university || '',
     department: user?.department || '',
+    study_goal_minutes: user?.study_goal_minutes ?? 120,
   });
   const [saving, setSaving] = useState(false);
 
@@ -167,6 +168,33 @@ const ProfilePage = () => {
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
               placeholder="e.g. Computer Science"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              <span className="flex items-center gap-1.5"><Target size={13} /> Daily Study Goal</span>
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {[30, 60, 90, 120, 150, 180, 240, 300].map((mins) => {
+                const h = Math.floor(mins / 60);
+                const m = mins % 60;
+                const label = h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`;
+                return (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setForm({ ...form, study_goal_minutes: mins })}
+                    className={`py-2 rounded-xl text-xs font-semibold border transition ${
+                      form.study_goal_minutes === mins
+                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                        : 'border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5">Target minutes to study each day — shown on your Analytics page.</p>
           </div>
           <div className="flex justify-end pt-1">
             <button

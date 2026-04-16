@@ -8,7 +8,7 @@ const useStudySessionTracker = ({
   courseId = null,
   documentId = null,
   sessionType = 'reading',
-  idleMs = 2 * 60 * 1000,
+  idleMs = 10 * 60 * 1000,
 }) => {
   const startSession = useStudyStore((s) => s.startSession);
   const endSession = useStudyStore((s) => s.endSession);

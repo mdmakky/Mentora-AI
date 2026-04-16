@@ -12,10 +12,11 @@ const useStudyStore = create(
   streak: null,
   todayStats: null,
   loading: false,
+  error: null,
 
   // Fetch full study dashboard
   fetchDashboard: async () => {
-    set({ loading: true });
+    set({ loading: true, error: null });
     try {
       const data = await apiClient.get('/study/dashboard');
       set({
@@ -28,11 +29,12 @@ const useStudyStore = create(
           goal_minutes: data?.goal_minutes || 120,
         },
         loading: false,
+        error: null,
       });
       return data;
     } catch (err) {
       console.error('Failed to fetch study dashboard:', err);
-      set({ loading: false });
+      set({ loading: false, error: err.message || 'Failed to load analytics' });
       return null;
     }
   },
@@ -112,6 +114,14 @@ const useStudyStore = create(
     {
       name: 'mentora-study-store',
       storage: getSmartStorage(),
+      // Never persist transient UI state — prevents infinite skeleton on reload
+      partialize: (state) => ({
+        dashboardData: state.dashboardData,
+        weeklyData: state.weeklyData,
+        courseStats: state.courseStats,
+        streak: state.streak,
+        todayStats: state.todayStats,
+      }),
     }
   )
 );

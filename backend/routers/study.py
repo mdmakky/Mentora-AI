@@ -4,19 +4,61 @@ from datetime import datetime, date, timedelta, timezone
 from schemas.study import StudySessionStart, StudyStatsResponse, StreakResponse
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user
-from services.study_service import calculate_streak, update_daily_streak
+from services.study_service import (
+    DEFAULT_MAX_SESSION_MINUTES,
+    calculate_streak,
+    reconcile_recent_streaks,
+    update_daily_streak_for_date,
+)
 
 router = APIRouter(prefix="/study", tags=["Study Tracking"])
 
 MIN_TRACKED_MINUTES = 1
-MAX_TRACKED_MINUTES = 360
+MAX_TRACKED_MINUTES = DEFAULT_MAX_SESSION_MINUTES
 
 
-def _safe_duration_minutes(started_at_iso: str, ended_at_dt: datetime) -> int:
-    started_at = datetime.fromisoformat(started_at_iso.replace("Z", "+00:00"))
-    duration = int((ended_at_dt - started_at).total_seconds() / 60)
-    duration = max(0, duration)
-    return min(duration, MAX_TRACKED_MINUTES)
+def _split_duration_by_date(started_at_iso: str, ended_at_dt: datetime) -> List[tuple]:
+    """Split a session's credited minutes across UTC calendar days."""
+    started_at = datetime.fromisoformat(started_at_iso.replace("Z", "+00:00")).astimezone(timezone.utc)
+    raw_ended_at = ended_at_dt.astimezone(timezone.utc)
+    capped_ended_at = min(raw_ended_at, started_at + timedelta(minutes=MAX_TRACKED_MINUTES))
+
+    if capped_ended_at <= started_at:
+        return []
+
+    total_minutes = int((capped_ended_at - started_at).total_seconds() // 60)
+    if total_minutes < MIN_TRACKED_MINUTES:
+        return []
+
+    allocations = []
+    allocated = 0
+    cursor = started_at
+
+    while cursor.date() < capped_ended_at.date():
+        next_midnight = datetime.combine(cursor.date() + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
+        segment_minutes = int((next_midnight - cursor).total_seconds() // 60)
+        if segment_minutes > 0:
+            allocations.append((cursor.date(), segment_minutes))
+            allocated += segment_minutes
+        cursor = next_midnight
+
+    remaining = total_minutes - allocated
+    if remaining >= MIN_TRACKED_MINUTES:
+        allocations.append((cursor.date(), remaining))
+
+    return allocations
+
+
+def _apply_session_minutes(user_id: str, started_at_iso: str, ended_at_dt: datetime, goal_minutes: int) -> int:
+    """Persist session duration and add its minutes into per-day streak buckets."""
+    allocations = _split_duration_by_date(started_at_iso, ended_at_dt)
+    total = 0
+    for target_date, minutes in allocations:
+        if minutes < MIN_TRACKED_MINUTES:
+            continue
+        update_daily_streak_for_date(user_id, target_date, minutes, goal_minutes)
+        total += minutes
+    return total
 
 
 @router.post("/session/start")
@@ -34,13 +76,11 @@ async def start_session(data: StudySessionStart, user: dict = Depends(get_curren
     user_goal = user.get("study_goal_minutes", 120)
     for row in (open_sessions.data or []):
         ended_at = datetime.now(timezone.utc)
-        duration = _safe_duration_minutes(row["started_at"], ended_at)
+        duration = _apply_session_minutes(user["id"], row["started_at"], ended_at, user_goal)
         db.table("study_sessions").update({
             "ended_at": ended_at.isoformat(),
             "duration_minutes": duration,
         }).eq("id", row["id"]).eq("user_id", user["id"]).execute()
-        if duration >= MIN_TRACKED_MINUTES:
-            update_daily_streak(user["id"], duration, user_goal)
 
     result = db.table("study_sessions").insert({
         "user_id": user["id"],
@@ -65,17 +105,12 @@ async def end_session(session_id: str, user: dict = Depends(get_current_user)):
         return session.data
 
     ended_at = datetime.now(timezone.utc)
-    duration = _safe_duration_minutes(session.data["started_at"], ended_at)
+    duration = _apply_session_minutes(user["id"], session.data["started_at"], ended_at, user.get("study_goal_minutes", 120))
 
     result = db.table("study_sessions").update({
         "ended_at": ended_at.isoformat(),
         "duration_minutes": duration,
     }).eq("id", session_id).execute()
-
-    # Update daily streak
-    user_goal = user.get("study_goal_minutes", 120)
-    if duration >= MIN_TRACKED_MINUTES:
-        update_daily_streak(user["id"], duration, user_goal)
 
     return result.data[0]
 
@@ -84,6 +119,7 @@ async def end_session(session_id: str, user: dict = Depends(get_current_user)):
 async def get_today_stats(user: dict = Depends(get_current_user)):
     """Get today's study stats."""
     db = get_supabase_admin()
+    reconcile_recent_streaks(user["id"], user.get("study_goal_minutes", 120))
     today = date.today().isoformat()
 
     streak = db.table("study_streaks").select("*").eq("user_id", user["id"]).eq("date", today).execute()
@@ -101,36 +137,57 @@ async def get_today_stats(user: dict = Depends(get_current_user)):
 async def get_weekly_stats(user: dict = Depends(get_current_user)):
     """Get last 7 days of study stats."""
     db = get_supabase_admin()
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    reconcile_recent_streaks(user["id"], user.get("study_goal_minutes", 120))
+    today = date.today()
+    week_start = (today - timedelta(days=6)).isoformat()
 
-    result = db.table("study_streaks").select("*").eq("user_id", user["id"]).gte("date", week_ago).order("date").execute()
+    result = db.table("study_streaks").select("*").eq("user_id", user["id"]).gte("date", week_start).lte("date", today.isoformat()).order("date").execute()
     return result.data or []
 
 
 @router.get("/stats/by-course")
 async def get_course_stats(user: dict = Depends(get_current_user)):
-    """Get study time by course."""
+    """Get study time by course from session timestamps (capped per session)."""
     db = get_supabase_admin()
 
-    sessions = db.table("study_sessions").select("course_id, duration_minutes").eq("user_id", user["id"]).not_.is_("duration_minutes", "null").execute()
+    sessions = db.table("study_sessions") \
+        .select("course_id, started_at, ended_at") \
+        .eq("user_id", user["id"]) \
+        .not_.is_("ended_at", "null") \
+        .not_.is_("started_at", "null") \
+        .execute()
 
-    # Aggregate by course
-    course_totals = {}
+    # Aggregate by course using the same midnight-split / cap logic
+    course_totals: dict = {}
     for s in (sessions.data or []):
         cid = s.get("course_id")
-        if cid:
-            course_totals[cid] = course_totals.get(cid, 0) + (s.get("duration_minutes") or 0)
+        if not cid:
+            continue
+        try:
+            allocations = _split_duration_by_date(s["started_at"], datetime.fromisoformat(s["ended_at"].replace("Z", "+00:00")))
+        except Exception:
+            continue
+        for _date, minutes in allocations:
+            if minutes >= MIN_TRACKED_MINUTES:
+                course_totals[cid] = course_totals.get(cid, 0) + minutes
 
-    # Get course info
+    if not course_totals:
+        return []
+
+    # Batch fetch all course info in one query
+    course_ids = list(course_totals.keys())
+    courses_result = db.table("courses").select("id, course_name, color").in_("id", course_ids).execute()
+    course_map = {c["id"]: c for c in (courses_result.data or [])}
+
     results = []
     for cid, total in course_totals.items():
-        course = db.table("courses").select("course_name, color").eq("id", cid).single().execute()
-        if course.data:
+        course = course_map.get(cid)
+        if course:
             results.append({
                 "course_id": cid,
-                "course_name": course.data["course_name"],
+                "course_name": course["course_name"],
                 "total_minutes": total,
-                "color": course.data.get("color", "#2563EB"),
+                "color": course.get("color") or "#2563EB",
             })
 
     return results
@@ -146,22 +203,32 @@ async def get_streak(user: dict = Depends(get_current_user)):
 async def get_dashboard(user: dict = Depends(get_current_user)):
     """Get all analytics data for the dashboard."""
     db = get_supabase_admin()
+    reconcile_recent_streaks(user["id"], user.get("study_goal_minutes", 120))
     today = date.today()
 
     # Today stats
     today_streak = db.table("study_streaks").select("*").eq("user_id", user["id"]).eq("date", today.isoformat()).execute()
     today_minutes = today_streak.data[0]["total_minutes"] if today_streak.data else 0
 
-    # Weekly stats
+    # Weekly stats — one batched query instead of 7
+    week_start = today - timedelta(days=6)
+    streaks_result = db.table("study_streaks") \
+        .select("date, total_minutes, goal_achieved") \
+        .eq("user_id", user["id"]) \
+        .gte("date", week_start.isoformat()) \
+        .lte("date", today.isoformat()) \
+        .execute()
+    streaks_map = {row["date"]: row for row in (streaks_result.data or [])}
+
     week_data = []
     for i in range(7):
-        d = today - timedelta(days=6 - i)
-        streak = db.table("study_streaks").select("total_minutes, goal_achieved").eq("user_id", user["id"]).eq("date", d.isoformat()).execute()
+        d = week_start + timedelta(days=i)
+        row = streaks_map.get(d.isoformat())
         week_data.append({
             "date": d.isoformat(),
             "day": d.strftime("%a"),
-            "total_minutes": streak.data[0]["total_minutes"] if streak.data else 0,
-            "goal_achieved": streak.data[0]["goal_achieved"] if streak.data else False,
+            "total_minutes": row["total_minutes"] if row else 0,
+            "goal_achieved": row["goal_achieved"] if row else False,
         })
 
     # Streak

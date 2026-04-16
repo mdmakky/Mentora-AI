@@ -6,11 +6,12 @@ import {
 import { Flame, Target, Clock, TrendingUp, Award, BookOpen } from 'lucide-react';
 import useStudyStore from '../stores/studyStore';
 import Spinner from '../components/ui/Spinner';
+import { AlertTriangle } from 'lucide-react';
 
 const PIE_COLORS = ['#059669', '#2563EB', '#7C3AED', '#DC2626', '#D97706', '#0891B2', '#E11D48', '#4F46E5'];
 
 const AnalyticsPage = () => {
-  const { dashboardData, weeklyData, courseStats, streak, todayStats, loading, fetchDashboard } =
+  const { dashboardData, weeklyData, courseStats, streak, todayStats, loading, error, fetchDashboard } =
     useStudyStore();
 
   useEffect(() => {
@@ -70,6 +71,28 @@ const AnalyticsPage = () => {
     );
   }
 
+  if (error && !dashboardData) {
+    return (
+      <div className="app-content">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 flex items-center justify-center">
+            <AlertTriangle size={24} className="text-rose-500" />
+          </div>
+          <div className="text-center">
+            <p className="font-semibold text-slate-900 mb-1">Couldn’t load analytics</p>
+            <p className="text-sm text-slate-500">{error}</p>
+          </div>
+          <button
+            onClick={() => fetchDashboard()}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const goalMinutes = todayStats?.goal_minutes || 120;
   const todayMinutes = todayStats?.total_minutes || 0;
   const goalProgress = Math.min((todayMinutes / goalMinutes) * 100, 100);
@@ -84,6 +107,15 @@ const AnalyticsPage = () => {
     if (h === 0) return `${m}m`;
     if (m === 0) return `${h}h`;
     return `${h}h ${m}m`;
+  };
+
+  // Format Y-axis ticks on bar chart
+  const formatYAxis = (v) => {
+    if (v === 0) return '0';
+    if (v < 60) return `${v}m`;
+    const h = Math.floor(v / 60);
+    const m = v % 60;
+    return m === 0 ? `${h}h` : `${h}h${m}m`;
   };
 
   const totalWeekMinutes = weeklyData.reduce((sum, d) => sum + (d.total_minutes || 0), 0);
@@ -180,7 +212,7 @@ const AnalyticsPage = () => {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 12, fill: '#94a3b8' }}
-                  tickFormatter={(v) => `${v}m`}
+                  tickFormatter={formatYAxis}
                 />
                 <Tooltip
                   contentStyle={{
@@ -189,7 +221,7 @@ const AnalyticsPage = () => {
                     boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                     fontSize: '13px',
                   }}
-                  formatter={(value) => [`${value} min`, 'Study Time']}
+                  formatter={(value) => [formatTime(value), 'Study Time']}
                 />
                 <Bar
                   dataKey="total_minutes"

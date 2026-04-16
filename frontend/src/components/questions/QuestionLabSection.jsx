@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import useQuestionLabStore from '../../stores/questionLabStore';
 import useDocumentStore from '../../stores/documentStore';
+import useStudySessionTracker from '../../utils/useStudySessionTracker';
 import PatternInsightsPanel from './PatternInsightsPanel';
 import QuestionCard from './QuestionCard';
 import Button from '../ui/Button';
@@ -61,6 +62,14 @@ const formatBytes = (bytes) => {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 const QuestionLabSection = ({ courseId, course }) => {
+  // Track time spent in Question Lab as a quiz session
+  useStudySessionTracker({
+    enabled: Boolean(courseId),
+    courseId: courseId || null,
+    documentId: null,
+    sessionType: 'quiz',
+  });
+
   const [showUpload, setShowUpload] = useState(false);
   const [qCount, setQCount] = useState(8);
   const [qType, setQType] = useState('broad');
