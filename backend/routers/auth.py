@@ -11,7 +11,7 @@ from google.oauth2 import id_token
 from schemas.auth import (
     UserRegister, UserLogin, UserProfile, ForgotPasswordRequest,
     ResetPasswordRequest, VerifyEmailRequest, TokenResponse, RefreshTokenRequest,
-    ChangePasswordRequest, GoogleAuthRequest, normalize_email,
+    ChangePasswordRequest, SetPasswordRequest, GoogleAuthRequest, normalize_email,
 )
 from core.security import create_access_token, create_refresh_token, get_password_hash, verify_password, decode_token
 from core.database import get_supabase_admin
@@ -354,6 +354,26 @@ async def change_password(
     new_hash = get_password_hash(data.new_password)
     db.table("users").update({"password_hash": new_hash}).eq("id", user["id"]).execute()
     return {"message": "Password changed successfully"}
+
+
+@router.post("/set-password")
+async def set_password(
+    data: SetPasswordRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Allow a Google-authenticated user to add a password to their account for the first time."""
+    db = get_supabase_admin()
+
+    user_result = db.table("users").select("password_hash").eq("id", user["id"]).single().execute()
+    if not user_result.data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user_result.data.get("password_hash"):
+        raise HTTPException(status_code=400, detail="Account already has a password. Use change-password instead.")
+
+    new_hash = get_password_hash(data.new_password)
+    db.table("users").update({"password_hash": new_hash}).eq("id", user["id"]).execute()
+    return {"message": "Password set successfully"}
 
 
 @router.post("/forgot-password")

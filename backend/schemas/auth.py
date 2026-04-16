@@ -157,6 +157,15 @@ class ChangePasswordRequest(BaseModel):
         return validate_password_strength(value)
 
 
+class SetPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=64, description="Password to set for first time")
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str) -> str:
+        return validate_password_strength(value)
+
+
 class UserResponse(BaseModel):
     id: str
     email: str
