@@ -91,7 +91,11 @@ def suspend_user(admin_id: str, user_id: str, reason: str = None):
     if admin_id == user_id:
         raise ValueError("Cannot suspend your own account")
 
-    db.table("users").update({"is_upload_suspended": True}).eq("id", user_id).execute()
+    from datetime import datetime, timezone
+    db.table("users").update({
+        "is_upload_suspended": True,
+        "upload_suspended_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", user_id).execute()
 
     log_admin_action(admin_id, "suspend_user", "user", user_id, {"reason": reason})
 
@@ -99,7 +103,10 @@ def suspend_user(admin_id: str, user_id: str, reason: str = None):
 def unsuspend_user(admin_id: str, user_id: str):
     """Unsuspend a user account."""
     db = get_supabase_admin()
-    db.table("users").update({"is_upload_suspended": False}).eq("id", user_id).execute()
+    db.table("users").update({
+        "is_upload_suspended": False,
+        "upload_suspended_at": None,
+    }).eq("id", user_id).execute()
     log_admin_action(admin_id, "unsuspend_user", "user", user_id)
 
 
@@ -122,13 +129,17 @@ def warn_user(admin_id: str, user_id: str, reason: str = None):
     db = get_supabase_admin()
 
     # Get current warning count
-    user = db.table("users").select("warning_count").eq("id", user_id).single().execute()
-    current_warnings = (user.data or {}).get("warning_count", 0)
+    user = db.table("users").select("warning_count, is_upload_suspended, upload_suspended_at").eq("id", user_id).single().execute()
+    user_data = user.data or {}
+    current_warnings = user_data.get("warning_count", 0)
     new_count = current_warnings + 1
 
     update_data = {"warning_count": new_count}
     if new_count >= 3:
         update_data["is_upload_suspended"] = True
+        # Ensure suspension window can be calculated reliably on the client.
+        if not user_data.get("is_upload_suspended") or not user_data.get("upload_suspended_at"):
+            update_data["upload_suspended_at"] = datetime.now(timezone.utc).isoformat()
 
     db.table("users").update(update_data).eq("id", user_id).execute()
     log_admin_action(admin_id, "warn_user", "user", user_id, {

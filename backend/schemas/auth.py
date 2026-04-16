@@ -168,6 +168,7 @@ class UserResponse(BaseModel):
     study_goal_minutes: int = 120
     warning_count: int = 0
     is_upload_suspended: bool = False
+    upload_suspended_at: Optional[str] = None
     is_admin: bool = False
     email_verified: bool = False
     created_at: Optional[str] = None

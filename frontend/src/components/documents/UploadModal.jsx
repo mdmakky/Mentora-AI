@@ -1,7 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, CheckCircle, AlertCircle, X, FileQuestion } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, X, FileQuestion, Lock, Clock, Send, MessageSquare } from 'lucide-react';
 import useDocumentStore from '../../stores/documentStore';
+import useAuthStore from '../../stores/authStore';
+import { apiClient } from '../../lib/apiClient';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
@@ -22,7 +24,70 @@ const CATEGORIES = [
  */
 const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => {
   const isQuestionPaper = forceCategory === 'question_paper';
-  
+  const user = useAuthStore((s) => s.user);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
+  const [freshSuspended, setFreshSuspended] = useState(null); // null = not checked yet
+  const [freshSuspendedAt, setFreshSuspendedAt] = useState(null);
+  const isSuspended = freshSuspended ?? !!user?.is_upload_suspended;
+  const suspendedAt = freshSuspendedAt ?? user?.upload_suspended_at ?? null;
+
+  // Fetch fresh suspension status every time the modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setFreshSuspended(null);
+    setFreshSuspendedAt(null);
+    refreshUser().then(() => {
+      // After refreshUser, the store is updated; read from store via useAuthStore
+    });
+    apiClient.get('/auth/me').then(data => {
+      setFreshSuspended(!!data?.is_upload_suspended);
+      setFreshSuspendedAt(data?.upload_suspended_at ?? null);
+    }).catch(() => {});
+  }, [isOpen]);
+
+  // Appeal state
+  const [appeal, setAppeal] = useState(undefined); // undefined=loading, null=none, object=appeal
+  const [appealMsg, setAppealMsg] = useState('');
+  const [appealSubmitting, setAppealSubmitting] = useState(false);
+  const [appealError, setAppealError] = useState('');
+  const [appealDone, setAppealDone] = useState(false);
+
+  // Fetch existing appeal when modal opens and user is suspended
+  useEffect(() => {
+    if (!isOpen || !isSuspended) return;
+    setAppeal(undefined);
+    apiClient.get('/appeals/suspension/my')
+      .then(data => setAppeal(data || null))
+      .catch(() => setAppeal(null));
+  }, [isOpen, isSuspended]);
+
+  // Compute days remaining using fresh suspendedAt
+  const getDaysRemaining = () => {
+    if (!suspendedAt) return null;
+    const liftAt = new Date(new Date(suspendedAt).getTime() + 7 * 24 * 60 * 60 * 1000);
+    const days = Math.ceil((liftAt - new Date()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, days);
+  };
+  const daysRemaining = getDaysRemaining();
+
+  const submitAppeal = async () => {
+    if (!appealMsg.trim() || appealMsg.trim().length < 10) {
+      setAppealError('Please write at least 10 characters explaining your situation.');
+      return;
+    }
+    setAppealSubmitting(true);
+    setAppealError('');
+    try {
+      await apiClient.post('/appeals/suspension', { message: appealMsg.trim() });
+      setAppealDone(true);
+      setAppeal({ status: 'pending' });
+    } catch (e) {
+      setAppealError(e.message || 'Failed to submit appeal');
+    } finally {
+      setAppealSubmitting(false);
+    }
+  };
+
   const [files, setFiles] = useState([]);
   const [declared, setDeclared] = useState(isQuestionPaper); // Auto-declare for question papers
   const [category, setCategory] = useState(forceCategory || 'lecture');
@@ -78,9 +143,18 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
     for (const file of files) {
       const result = await uploadDocument(file, courseId, folderId, effectiveCategory);
       if (!result.success) {
+        // If backend returns a suspension 403, switch to suspension UI
+        if (result.error?.includes('suspended')) {
+          setFreshSuspended(true);
+          refreshUser();
+          apiClient.get('/auth/me').then(data => {
+            setFreshSuspendedAt(data?.upload_suspended_at ?? null);
+          }).catch(() => {});
+          return;
+        }
         setError(result.error || `Upload failed for ${file.name}`);
         hasError = true;
-        break; // Stop uploading if one fails
+        break;
       }
     }
 
@@ -96,6 +170,12 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
     setCategory(forceCategory || 'lecture');
     setError('');
     setSuccess(false);
+    setFreshSuspended(null);
+    setFreshSuspendedAt(null);
+    setAppeal(undefined);
+    setAppealMsg('');
+    setAppealError('');
+    setAppealDone(false);
   };
 
   const handleClose = () => { handleReset(); onClose(); };
@@ -104,7 +184,97 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={modalTitle} maxWidth="520px">
-      {success ? (
+      {/* ── Suspended screen ── */}
+      {isSuspended ? (
+        <div className="space-y-4 py-2">
+          {/* Header */}
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200">
+            <Lock size={18} className="text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-red-800">Upload access suspended</p>
+              <p className="text-xs text-red-600 mt-0.5 leading-relaxed">
+                Your account has been suspended from uploading documents due to a policy violation.
+              </p>
+            </div>
+          </div>
+
+          {/* Auto-lift countdown */}
+          {daysRemaining !== null && (
+            <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50">
+              <Clock size={15} className="text-slate-400 shrink-0" />
+              {daysRemaining === 0 ? (
+                <p className="text-xs text-slate-600">Auto-lift applies on your <strong>next upload attempt</strong>. Try uploading again.</p>
+              ) : (
+                <p className="text-xs text-slate-600">
+                  Suspension auto-lifts in <strong className="text-slate-800">{daysRemaining} day{daysRemaining !== 1 ? 's' : ''}</strong> if no action is taken.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Appeal section */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+              <MessageSquare size={14} className="text-slate-500" />
+              <p className="text-xs font-bold text-slate-700">Appeal to Admin</p>
+            </div>
+            <div className="px-4 py-4">
+              {appeal === undefined ? (
+                <p className="text-xs text-slate-400 text-center py-2">Loading…</p>
+              ) : appeal?.status === 'pending' ? (
+                <div className="flex items-start gap-2.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                  <Clock size={13} className="shrink-0 mt-0.5" />
+                  <span>Your appeal is <strong>under review</strong>. We'll notify you when a decision is made.</span>
+                </div>
+              ) : appeal?.status === 'rejected' ? (
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2.5 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2.5">
+                    <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Previous appeal was rejected</p>
+                      {appeal.admin_response && <p className="mt-0.5 text-rose-600">{appeal.admin_response}</p>}
+                    </div>
+                  </div>
+                  {daysRemaining !== null && daysRemaining > 0 && (
+                    <p className="text-xs text-slate-500 text-center">You may wait for the auto-lift or submit a new request through the contact form.</p>
+                  )}
+                </div>
+              ) : appealDone ? (
+                <div className="flex items-center gap-2.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2.5">
+                  <CheckCircle size={13} className="shrink-0" />
+                  <span>Appeal submitted! The admin will review it shortly.</span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">Explain your situation and why you believe the suspension should be lifted.</p>
+                  <textarea
+                    value={appealMsg}
+                    onChange={e => { setAppealMsg(e.target.value); setAppealError(''); }}
+                    placeholder="e.g. I uploaded my own lecture notes. The copyright flag was a false positive…"
+                    rows={3}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-xs text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-slate-400 resize-none"
+                  />
+                  {appealError && (
+                    <p className="text-xs text-rose-600 flex items-center gap-1.5"><AlertCircle size={12} />{appealError}</p>
+                  )}
+                  <button
+                    onClick={submitAppeal}
+                    disabled={appealSubmitting}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition disabled:opacity-50"
+                  >
+                    <Send size={13} />
+                    {appealSubmitting ? 'Submitting…' : 'Submit Appeal'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button variant="ghost" size="sm" onClick={handleClose}>Close</Button>
+          </div>
+        </div>
+      ) : success ? (
         <div className="text-center py-8 animate-scale-in">
           <CheckCircle size={48} className="text-emerald-500 mx-auto mb-3" />
           <p className="text-lg font-semibold text-slate-900">Upload Successful!</p>

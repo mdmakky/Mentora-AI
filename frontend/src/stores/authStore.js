@@ -27,6 +27,19 @@ const useAuthStore = create((set, get) => ({
   token: localStorage.getItem('token') || null,
   isAuthenticated: !!localStorage.getItem('token'),
 
+  refreshUser: async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await fetch('/api/v1/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const fresh = await res.json();
+      set({ user: sanitizeUser(fresh) });
+    } catch { /* silent */ }
+  },
+
   setSession: ({ access_token, refresh_token, user }) => {
     localStorage.setItem('token', access_token);
     localStorage.setItem('refreshToken', refresh_token);

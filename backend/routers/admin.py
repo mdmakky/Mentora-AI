@@ -7,6 +7,7 @@ from services.admin_service import (
     verify_user_email, approve_document, reject_document, log_admin_action, decide_review_request,
 )
 from pydantic import BaseModel
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -308,3 +309,75 @@ async def get_admin_user_logs(admin_id: str, admin: dict = Depends(get_current_a
     db = get_supabase_admin()
     result = db.table("admin_activity_logs").select("*").eq("admin_id", admin_id).order("created_at", desc=True).limit(100).execute()
     return result.data or []
+
+
+class AppealDecisionRequest(BaseModel):
+    decision: str  # approved | rejected
+    admin_response: Optional[str] = None
+
+
+@router.get("/suspension-appeals")
+async def list_suspension_appeals(
+    status: Optional[str] = "pending",
+    admin: dict = Depends(get_current_admin),
+):
+    """List suspension appeals with optional status filter."""
+    db = get_supabase_admin()
+    query = db.table("suspension_appeals").select(
+        "*, users!suspension_appeals_user_id_fkey(email, full_name, upload_suspended_at, warning_count)"
+    )
+    if status:
+        query = query.eq("status", status)
+    result = query.order("created_at", desc=True).execute()
+    return result.data or []
+
+
+@router.post("/suspension-appeals/{appeal_id}/decide")
+async def decide_suspension_appeal(
+    appeal_id: str,
+    body: AppealDecisionRequest,
+    admin: dict = Depends(get_current_admin),
+):
+    """Approve or reject a suspension appeal."""
+    if body.decision not in ("approved", "rejected"):
+        raise HTTPException(status_code=422, detail="Decision must be 'approved' or 'rejected'")
+
+    db = get_supabase_admin()
+    appeal = db.table("suspension_appeals").select("*").eq("id", appeal_id).single().execute()
+    if not appeal.data:
+        raise HTTPException(status_code=404, detail="Appeal not found")
+    if appeal.data["status"] != "pending":
+        raise HTTPException(status_code=409, detail="Appeal has already been decided")
+
+    db.table("suspension_appeals").update({
+        "status": body.decision,
+        "admin_response": body.admin_response,
+        "decided_by": admin["id"],
+        "decided_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", appeal_id).execute()
+
+    user_id = appeal.data["user_id"]
+
+    if body.decision == "approved":
+        db.table("users").update({
+            "is_upload_suspended": False,
+            "upload_suspended_at": None,
+        }).eq("id", user_id).execute()
+        db.table("notifications").insert({
+            "user_id": user_id,
+            "type": "review_approved",
+            "title": "Suspension Lifted",
+            "body": "Your suspension appeal was approved. You can now upload documents again.",
+        }).execute()
+        log_admin_action(admin["id"], "approve_appeal", "user", user_id, {"appeal_id": appeal_id})
+    else:
+        note = body.admin_response or "Your suspension appeal was reviewed and denied."
+        db.table("notifications").insert({
+            "user_id": user_id,
+            "type": "review_rejected",
+            "title": "Suspension Appeal Rejected",
+            "body": note,
+        }).execute()
+        log_admin_action(admin["id"], "reject_appeal", "user", user_id, {"appeal_id": appeal_id, "response": body.admin_response})
+
+    return {"message": f"Appeal {body.decision}"}
