@@ -1,21 +1,26 @@
 import { useState, useEffect } from 'react';
-import { Activity, Search, Server, UserX, DatabaseZap, Clock, FileWarning } from 'lucide-react';
+import { Activity, Clock } from 'lucide-react';
 import { apiClient } from '../../lib/apiClient';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
 
-const getActionIcon = (actionType) => {
-  if (actionType.includes('delete') || actionType.includes('suspend')) return <UserX size={14} />;
-  if (actionType.includes('document')) return <FileWarning size={14} />;
-  return <DatabaseZap size={14} />;
+const ACTION_LABELS = {
+  suspend_user:                 { label: 'User suspended',              color: 'text-red-700 bg-red-50 border-red-200' },
+  unsuspend_user:               { label: 'User unsuspended',            color: 'text-green-700 bg-green-50 border-green-200' },
+  warn_user:                    { label: 'Warning issued',              color: 'text-amber-700 bg-amber-50 border-amber-200' },
+  reset_warnings:               { label: 'Warnings reset',              color: 'text-blue-700 bg-blue-50 border-blue-200' },
+  verify_email:                 { label: 'Email verified',              color: 'text-green-700 bg-green-50 border-green-200' },
+  delete_user:                  { label: 'User deleted',                color: 'text-red-700 bg-red-50 border-red-200' },
+  approve_document:             { label: 'Document approved',           color: 'text-green-700 bg-green-50 border-green-200' },
+  reject_document:              { label: 'Document rejected',           color: 'text-red-700 bg-red-50 border-red-200' },
+  reject_document_warn:         { label: 'Rejected + warning issued',   color: 'text-amber-700 bg-amber-50 border-amber-200' },
+  reject_document_suspend:      { label: 'Rejected + user suspended',   color: 'text-red-700 bg-red-50 border-red-200' },
+  review_approve:               { label: 'Appeal approved',             color: 'text-green-700 bg-green-50 border-green-200' },
+  review_reject_with_penalty:   { label: 'Appeal rejected',             color: 'text-red-700 bg-red-50 border-red-200' },
+  force_delete_document:        { label: 'Document force deleted',      color: 'text-red-700 bg-red-50 border-red-200' },
 };
 
-const getActionColor = (actionType) => {
-  if (actionType.includes('delete') || actionType.includes('reject')) return 'text-rose-600 bg-rose-50 ring-rose-200/50';
-  if (actionType.includes('suspend')) return 'text-amber-600 bg-amber-50 ring-amber-200/50';
-  if (actionType.includes('approve')) return 'text-emerald-600 bg-emerald-50 ring-emerald-200/50';
-  return 'text-blue-600 bg-blue-50 ring-blue-200/50';
-};
+const getAction = (type) => ACTION_LABELS[type] || { label: type.replace(/_/g, ' '), color: 'text-gray-600 bg-gray-50 border-gray-200' };
 
 const AdminLogs = () => {
   const [logs, setLogs] = useState([]);
@@ -27,152 +32,113 @@ const AdminLogs = () => {
   const fetchLogs = async () => {
     try {
       setLoading(true);
-      const queryParams = new URLSearchParams({ page, per_page: 20 });
-      if (filterType) queryParams.append('action_type', filterType);
-      
-      const data = await apiClient.get(`/admin/logs?${queryParams.toString()}`);
+      const q = new URLSearchParams({ page, per_page: 25 });
+      if (filterType) q.append('action_type', filterType);
+      const data = await apiClient.get(`/admin/logs?${q}`);
       setLogs(data.logs || []);
       setTotal(data.total || 0);
-    } catch (error) {
-      toast.error(error.message || 'Failed to fetch systemic logs');
+    } catch (e) {
+      toast.error(e.message || 'Failed to load logs');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchLogs();
-  }, [filterType, page]);
+  useEffect(() => { fetchLogs(); }, [filterType, page]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8 animate-fade-in">
-      
-      {/* Premium Header Context */}
-      <div className="relative overflow-hidden rounded-3xl bg-white px-8 py-8 shadow-sm ring-1 ring-slate-100 flex items-center justify-between">
-        <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="absolute -right-10 -bottom-10 h-40 w-40 rounded-full bg-teal-500/10 blur-3xl" />
-        
-        <div className="relative z-10 flex items-center gap-6">
-           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-lg shadow-emerald-500/30">
-            <Server size={32} strokeWidth={2} />
-          </div>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-800">Operational Auditing</h1>
-            <p className="mt-1 text-sm font-medium text-slate-500">
-              Immutable telemetry log tracking moderation directives and administrative overrides.
-            </p>
-          </div>
+    <div className="max-w-5xl mx-auto px-4 py-8 sm:px-6 space-y-5">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 pb-1">
+        <Activity size={20} className="text-gray-400" strokeWidth={1.5} />
+        <div>
+          <h1 className="text-lg font-bold text-gray-800">Activity Log</h1>
+          <p className="text-xs text-gray-400">Audit trail of all admin actions</p>
         </div>
       </div>
 
-      <div className="rounded-3xl bg-white shadow-lg shadow-slate-200/40 ring-1 ring-slate-100 overflow-hidden relative">
-        {/* Sleek Filters */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 backdrop-blur-sm">
+      {/* Filter */}
+      <div className="flex items-center gap-3">
+        <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }}
+          className="px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-gray-400">
+          <option value="">All actions</option>
+          <option value="suspend_user">Suspensions</option>
+          <option value="unsuspend_user">Unsuspensions</option>
+          <option value="warn_user">Warnings issued</option>
+          <option value="reset_warnings">Warnings reset</option>
+          <option value="verify_email">Email verifications</option>
+          <option value="delete_user">User deletions</option>
+          <option value="approve_document">Documents approved</option>
+          <option value="reject_document">Documents rejected</option>
+          <option value="reject_document_warn">Rejected + warned</option>
+          <option value="reject_document_suspend">Rejected + suspended</option>
+          <option value="review_approve">Appeals approved</option>
+          <option value="review_reject_with_penalty">Appeals rejected</option>
+          <option value="force_delete_document">Force deletions</option>
+        </select>
+        {total > 0 && <span className="text-xs text-gray-400">{total} entries</span>}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-5 py-3 text-left">Admin</th>
+              <th className="px-4 py-3 text-left">Action</th>
+              <th className="px-4 py-3 text-left">Target</th>
+              <th className="px-5 py-3 text-right">Time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {loading ? (
+              <tr><td colSpan="4" className="py-16 text-center"><Spinner className="mx-auto text-gray-400" /></td></tr>
+            ) : logs.length === 0 ? (
+              <tr><td colSpan="4" className="py-16 text-center text-sm text-gray-400">No activity logged yet.</td></tr>
+            ) : logs.map(log => {
+              const action = getAction(log.action_type);
+              return (
+                <tr key={log.id} className="hover:bg-gray-50/60 transition-colors">
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gray-800 text-white text-[11px] font-bold">
+                        {log.users?.email?.charAt(0)?.toUpperCase() || 'A'}
+                      </div>
+                      <p className="text-sm text-gray-700 font-medium">{log.users?.email || 'Unknown'}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <span className={`inline-flex items-center text-[11px] font-semibold border rounded px-2 py-0.5 capitalize ${action.color}`}>
+                      {action.label}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <p className="text-xs text-gray-500 capitalize">{log.target_type || '—'}</p>
+                    {log.details && (
+                      <p className="text-[11px] text-gray-400 mt-0.5 truncate max-w-[200px]" title={JSON.stringify(log.details)}>
+                        {typeof log.details === 'string' ? log.details : log.details?.reason || log.details?.note || ''}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                      <Clock size={11} strokeWidth={1.5} />
+                      {new Date(log.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between">
+          <p className="text-xs text-gray-400">{(page-1)*25+(total>0?1:0)}–{Math.min(page*25,total)} of {total}</p>
           <div className="flex gap-2">
-            <select
-              value={filterType}
-              onChange={(e) => { setFilterType(e.target.value); setPage(1); }}
-              className="appearance-none rounded-xl border-none bg-white px-5 py-3 pr-10 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-slate-200 transition-all hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
-            >
-              <option value="">All Telemetry Events</option>
-              <option value="suspend_user">Suspensions</option>
-              <option value="unsuspend_user">Unsuspensions</option>
-              <option value="warn_user">User Warnings</option>
-              <option value="reset_warnings">Warning Resets</option>
-              <option value="verify_email">Email Verifications</option>
-              <option value="delete_user">User Deletions</option>
-              <option value="approve_document">Approved Documents</option>
-              <option value="reject_document">Rejected Documents</option>
-              <option value="reject_document_warn">Rejected + Warned</option>
-              <option value="reject_document_suspend">Rejected + Suspended</option>
-              <option value="review_approve">Review Approvals</option>
-              <option value="review_reject_with_penalty">Review Rejections</option>
-              <option value="force_delete_document">Destructive Erases</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Dynamic Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white border-b border-slate-100 text-[11px] font-black uppercase tracking-widest text-slate-400">
-                <th className="px-8 py-5">Administrator Signature</th>
-                <th className="px-6 py-5">Action Directive</th>
-                <th className="px-6 py-5">Target Node</th>
-                <th className="px-8 py-5 text-right w-48">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 bg-white">
-              {loading ? (
-                <tr>
-                  <td colSpan="4" className="px-8 py-16 text-center">
-                    <Spinner className="mx-auto text-emerald-500" />
-                  </td>
-                </tr>
-              ) : logs.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-8 py-16 text-center text-slate-400 font-medium">
-                    Telemetry buffer is empty.
-                  </td>
-                </tr>
-              ) : (
-                logs.map((log) => (
-                  <tr key={log.id} className="group hover:bg-emerald-50/20 transition-colors duration-200">
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white font-bold ring-2 ring-white shadow-sm">
-                          {log.users?.email?.charAt(0)?.toUpperCase() || 'A'}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-800">{log.users?.email || 'Unknown Protocol'}</span>
-                          <span className="text-[10px] font-mono font-semibold text-slate-400 tracking-wide">{log.admin_id}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <span className={`inline-flex flex-row items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-widest shadow-sm ring-1 ${getActionColor(log.action_type)}`}>
-                        {getActionIcon(log.action_type)}
-                        {log.action_type.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex flex-col">
-                         <span className="text-xs font-bold text-slate-500 uppercase">{log.target_type} Node</span>
-                         <span className="text-xs font-mono font-medium text-slate-400">{log.target_id || 'Global'}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                       <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">
-                          <Clock size={12} strokeWidth={3} />
-                          {new Date(log.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit', second: '2-digit' })}
-                       </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Container */}
-        <div className="px-8 py-5 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-400 bg-slate-50/50">
-           <p>BUFFER {(page - 1) * 20 + (total > 0 ? 1 : 0)} TO {Math.min(page * 20, total)} OF {total}</p>
-          <div className="flex gap-2 text-sm font-medium text-slate-600">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-4 py-2 rounded-lg bg-white shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition-all active:scale-95"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              disabled={page * 20 >= total}
-              className="px-4 py-2 rounded-lg bg-white shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white transition-all active:scale-95"
-            >
-              Forward
-            </button>
+            <button onClick={() => setPage(p => Math.max(1,p-1))} disabled={page===1}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">Prev</button>
+            <button onClick={() => setPage(p => p+1)} disabled={page*25>=total}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 transition-colors">Next</button>
           </div>
         </div>
       </div>

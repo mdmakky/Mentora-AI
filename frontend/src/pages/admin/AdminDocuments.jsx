@@ -5,6 +5,7 @@ import { apiClient } from '../../lib/apiClient';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
@@ -143,6 +144,8 @@ const AdminDocuments = () => {
   const [reviewModal, setReviewModal] = useState(null);
   const [reviewNote, setReviewNote] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // { docId }
+  const [warnConfirm, setWarnConfirm] = useState(null);    // { docId }
 
   useEffect(() => { setStatusFilter(tabFromUrl); setPage(1); }, [tabFromUrl]);
 
@@ -190,18 +193,44 @@ const AdminDocuments = () => {
   const handleAction = async (action, docId, msg) => {
     try {
       if (action === 'force-delete') {
-        if (!window.confirm('Permanently delete this document?')) return;
-        await apiClient.delete(`/admin/documents/${docId}/force-delete`);
+        setDeleteConfirm({ docId, msg });
+        return;
       } else if (action === 'reject') {
-        const warn = window.confirm('Add a copyright violation warning to the user?');
-        await apiClient.put(`/admin/documents/${docId}/reject`, { warn_user: warn, suspend_user_flag: false });
+        setWarnConfirm({ docId, msg });
+        return;
       } else {
         await apiClient.put(`/admin/documents/${docId}/${action}`);
+        toast.success(msg);
+        fetchDocuments();
       }
-      toast.success(msg);
-      fetchDocuments();
     } catch (e) {
       toast.error(e.message || `Action failed`);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await apiClient.delete(`/admin/documents/${deleteConfirm.docId}/force-delete`);
+      toast.success(deleteConfirm.msg || 'Document deleted');
+      fetchDocuments();
+    } catch (e) {
+      toast.error(e.message || 'Delete failed');
+    } finally {
+      setDeleteConfirm(null);
+    }
+  };
+
+  const confirmRejectWithWarn = async (warnUser) => {
+    if (!warnConfirm) return;
+    try {
+      await apiClient.put(`/admin/documents/${warnConfirm.docId}/reject`, { warn_user: warnUser, suspend_user_flag: false });
+      toast.success(warnConfirm.msg || 'Document rejected');
+      fetchDocuments();
+    } catch (e) {
+      toast.error(e.message || 'Reject failed');
+    } finally {
+      setWarnConfirm(null);
     }
   };
 
@@ -420,6 +449,28 @@ const AdminDocuments = () => {
           </div>
         </Modal>
       )}
+
+      {/* Force delete confirm */}
+      <ConfirmDialog
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title="Permanently delete document?"
+        message="This will remove the document and all associated data. This action cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="danger"
+      />
+
+      {/* Reject with warn confirm */}
+      <ConfirmDialog
+        isOpen={!!warnConfirm}
+        onClose={() => confirmRejectWithWarn(false)}
+        onConfirm={() => confirmRejectWithWarn(true)}
+        title="Add copyright warning to user?"
+        message="Clicking 'Add Warning' will reject the document and add a copyright violation warning to the user's account."
+        confirmLabel="Add Warning"
+        confirmVariant="warning"
+      />
     </div>
   );
 };

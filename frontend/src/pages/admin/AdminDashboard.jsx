@@ -1,37 +1,20 @@
 import { useState, useEffect } from 'react';
-import { ShieldCheck, Users, FileText, Database, Activity, AlertTriangle, ClipboardList, ChevronRight } from 'lucide-react';
+import { ShieldCheck, Users, FileText, Database, BookOpen, AlertTriangle, ClipboardList, TrendingUp, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../lib/apiClient';
 import Spinner from '../../components/ui/Spinner';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area
-} from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-const StatCard = ({ icon: Icon, title, value, gradient, shadowColor, subtitle }) => (
-  <div className="relative group overflow-hidden rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-100 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 block cursor-default">
-    {/* Decorative background blur */}
-    <div className={`absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-10 blur-2xl transition-opacity duration-300 group-hover:opacity-30 ${gradient}`} />
-    
-    <div className="flex items-center gap-5">
-      <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-lg ${shadowColor}`}>
-        <Icon size={26} strokeWidth={2.5} />
-      </div>
-      <div>
-        <p className="text-sm font-semibold tracking-wide text-slate-500 uppercase">{title}</p>
-        <div className="mt-1 flex items-baseline gap-2">
-          <h3 className="text-3xl font-extrabold tracking-tight text-slate-800">{value}</h3>
-        </div>
-        {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
+const StatCard = ({ icon: Icon, label, value, sub, accent }) => (
+  <div className="bg-white border border-gray-200 rounded-xl p-5">
+    <div className="flex items-center justify-between mb-3">
+      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</span>
+      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${accent}`}>
+        <Icon size={15} strokeWidth={2} />
       </div>
     </div>
+    <p className="text-3xl font-bold text-gray-800">{value ?? '—'}</p>
+    {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
   </div>
 );
 
@@ -42,205 +25,153 @@ const AdminDashboard = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchStats();
+    apiClient.get('/admin/stats')
+      .then(setStats)
+      .catch(e => setError(e.message || 'Failed to load stats'))
+      .finally(() => setLoading(false));
   }, []);
 
-  const fetchStats = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.get('/admin/stats');
-      setStats(data);
-    } catch (err) {
-      setError(err.message || 'Failed to fetch statistics');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <Spinner size="lg" className="text-indigo-600" />
-        <p className="text-sm font-medium text-slate-400 animate-pulse">Initializing Administrative Vectors...</p>
-      </div>
-    </div>
+    <div className="flex items-center justify-center min-h-[50vh]"><Spinner className="text-gray-400" /></div>
   );
 
   if (error) return (
-    <div className="m-8 flex items-center gap-4 rounded-2xl border border-rose-200 bg-rose-50/50 p-6 text-rose-700 shadow-sm backdrop-blur-xl">
-      <div className="rounded-full bg-rose-100 p-3">
-        <AlertTriangle size={24} className="text-rose-600" />
-      </div>
-      <div>
-        <h3 className="font-bold">System Metric Failure</h3>
-        <p className="text-sm opacity-80">{error}</p>
-      </div>
+    <div className="m-8 flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+      <AlertTriangle size={18} strokeWidth={1.5} />
+      <p className="text-sm">{error}</p>
     </div>
   );
 
   if (!stats) return null;
 
+  const hasPendingActions = stats.pending_reviews > 0 || stats.quarantined_pending > 0;
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-8 animate-fade-in">
-      
-      {/* Sleek Header Context */}
-      <div className="relative overflow-hidden rounded-3xl bg-slate-900 px-8 py-10 shadow-2xl">
-        {/* Dynamic mesh glow */}
-        <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/20 blur-3xl mix-blend-screen" />
-        <div className="absolute -bottom-32 -right-20 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl mix-blend-screen" />
-        
-        <div className="relative z-10 flex items-center gap-5">
-          <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20 backdrop-blur-xl shadow-inner">
-            <ShieldCheck size={32} className="text-indigo-300" strokeWidth={2} />
-          </div>
-          <div>
-            <h1 className="bg-gradient-to-r from-white to-slate-400 bg-clip-text text-3xl font-extrabold tracking-tight text-transparent">
-              Command Center
-            </h1>
-            <p className="mt-1 text-sm font-medium text-slate-400 flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-              </span>
-              System fully operational parameters normal.
-            </p>
-          </div>
+    <div className="max-w-5xl mx-auto px-4 py-8 sm:px-6 space-y-6">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 pb-1">
+        <ShieldCheck size={20} className="text-gray-400" strokeWidth={1.5} />
+        <div>
+          <h1 className="text-lg font-bold text-gray-800">Admin Dashboard</h1>
+          <p className="text-xs text-gray-400">System overview and pending actions</p>
         </div>
       </div>
 
-      {/* Review Queue Action Banner — shown when there are pending reviews */}
-      {(stats.pending_reviews > 0 || stats.quarantined_pending > 0) && (
+      {/* Action Banners */}
+      {hasPendingActions && (
         <div className="flex flex-col sm:flex-row gap-3">
           {stats.pending_reviews > 0 && (
             <button
               onClick={() => navigate('/admin/documents?tab=review_pending')}
-              className="flex-1 flex items-center gap-4 rounded-2xl bg-violet-600 px-6 py-4 text-white shadow-lg shadow-violet-500/30 hover:bg-violet-700 transition-all hover:-translate-y-0.5 active:translate-y-0 group"
+              className="flex-1 flex items-center justify-between gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3.5 text-left hover:bg-violet-100 transition-colors group"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
-                <ClipboardList size={22} strokeWidth={2.5} />
+              <div className="flex items-center gap-3">
+                <ClipboardList size={16} className="text-violet-600 shrink-0" strokeWidth={2} />
+                <div>
+                  <p className="text-sm font-semibold text-violet-800">
+                    {stats.pending_reviews} review request{stats.pending_reviews !== 1 ? 's' : ''} pending
+                  </p>
+                  <p className="text-xs text-violet-500">User appeals waiting for your decision</p>
+                </div>
               </div>
-              <div className="text-left flex-1">
-                <p className="text-xs font-bold uppercase tracking-wider opacity-80">Action Required</p>
-                <p className="text-lg font-extrabold">
-                  {stats.pending_reviews} Review Request{stats.pending_reviews !== 1 ? 's' : ''} Pending
-                </p>
-              </div>
-              <ChevronRight size={20} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight size={14} className="text-violet-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
             </button>
           )}
           {stats.quarantined_pending > 0 && (
             <button
               onClick={() => navigate('/admin/documents?tab=quarantined')}
-              className="flex-1 flex items-center gap-4 rounded-2xl bg-amber-500 px-6 py-4 text-white shadow-lg shadow-amber-500/30 hover:bg-amber-600 transition-all hover:-translate-y-0.5 active:translate-y-0 group"
+              className="flex-1 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 text-left hover:bg-amber-100 transition-colors group"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20">
-                <AlertTriangle size={22} strokeWidth={2.5} />
+              <div className="flex items-center gap-3">
+                <AlertTriangle size={16} className="text-amber-600 shrink-0" strokeWidth={2} />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">
+                    {stats.quarantined_pending} document{stats.quarantined_pending !== 1 ? 's' : ''} quarantined
+                  </p>
+                  <p className="text-xs text-amber-500">Flagged content awaiting moderation</p>
+                </div>
               </div>
-              <div className="text-left flex-1">
-                <p className="text-xs font-bold uppercase tracking-wider opacity-80">Quarantined</p>
-                <p className="text-lg font-extrabold">
-                  {stats.quarantined_pending} Document{stats.quarantined_pending !== 1 ? 's' : ''} Flagged
-                </p>
-              </div>
-              <ChevronRight size={20} className="opacity-70 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight size={14} className="text-amber-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
             </button>
           )}
         </div>
       )}
 
-      {/* Grid Highlighting Cards */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard 
-          icon={Users} 
-          title="Total Users" 
-          value={stats.total_users || 0}
-          gradient="from-blue-500 to-indigo-600"
-          shadowColor="shadow-blue-500/30"
-          subtitle="Registered accounts"
-        />
-        <StatCard 
-          icon={FileText} 
-          title="Documents" 
-          value={stats.total_documents || 0}
-          gradient="from-emerald-400 to-teal-500"
-          shadowColor="shadow-emerald-500/30"
-          subtitle="Processed files"
-        />
-        <StatCard 
-          icon={Database} 
-          title="Knowledge Vectors" 
-          value={stats.total_chunks || 0}
-          gradient="from-purple-500 to-fuchsia-600"
-          shadowColor="shadow-purple-500/30"
-          subtitle="AI embeddings"
-        />
-        <StatCard 
-          icon={Activity} 
-          title="Active Courses" 
-          value={stats.total_courses || 0}
-          gradient="from-amber-400 to-orange-500"
-          shadowColor="shadow-amber-500/30"
-          subtitle="Learning spaces"
-        />
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard icon={Users} label="Total Users" value={stats.total_users} sub={`${stats.verified_users ?? 0} verified`} accent="bg-blue-50 text-blue-500" />
+        <StatCard icon={FileText} label="Documents" value={stats.total_documents} sub="uploaded files" accent="bg-green-50 text-green-500" />
+        <StatCard icon={Database} label="AI Chunks" value={stats.total_chunks} sub="embedded vectors" accent="bg-purple-50 text-purple-500" />
+        <StatCard icon={BookOpen} label="Courses" value={stats.total_courses} sub="active courses" accent="bg-orange-50 text-orange-500" />
       </div>
 
-      {/* Visualizations Container */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md">
-          <div className="mb-8">
-             <h3 className="text-lg font-bold text-slate-800">Registration Velocity</h3>
-             <p className="text-xs text-slate-500">Trailing 30-day chronological density.</p>
+      {/* Secondary stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-gray-800">{stats.active_sessions_24h ?? 0}</p>
+          <p className="text-xs text-gray-400 mt-1">Sessions (last 24h)</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
+          <p className={`text-2xl font-bold ${stats.suspended_users > 0 ? 'text-red-600' : 'text-gray-800'}`}>{stats.suspended_users ?? 0}</p>
+          <p className="text-xs text-gray-400 mt-1">Suspended users</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
+          <p className="text-2xl font-bold text-gray-800">{(stats.total_users ?? 0) - (stats.verified_users ?? 0)}</p>
+          <p className="text-xs text-gray-400 mt-1">Unverified accounts</p>
+        </div>
+      </div>
+
+      {/* Registration chart */}
+      {stats.daily_registrations?.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-5">
+            <TrendingUp size={15} className="text-gray-400" strokeWidth={1.5} />
+            <div>
+              <p className="text-sm font-semibold text-gray-700">New Registrations</p>
+              <p className="text-xs text-gray-400">Last 30 days</p>
+            </div>
           </div>
-          <div className="h-72">
+          <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={stats.daily_registrations || []}>
+              <AreaChart data={stats.daily_registrations}>
                 <defs>
-                  <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                  <linearGradient id="reg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="date" 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
-                  tickFormatter={(val) => new Date(val).toLocaleDateString(undefined, { month: 'short', day: 'numeric'})}
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                <XAxis dataKey="date" axisLine={false} tickLine={false}
+                  tick={{ fontSize: 11, fill: '#9ca3af' }}
+                  tickFormatter={v => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                 />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
-                  allowDecimals={false}
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false} width={28} />
+                <Tooltip
+                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }}
+                  labelFormatter={v => new Date(v).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                 />
-                <Tooltip 
-                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }}
-                  contentStyle={{ borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  labelFormatter={(val) => new Date(val).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                />
-                <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorCount)" />
+                <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2} fill="url(#reg)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
+      )}
 
-        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md flex flex-col items-center justify-center relative overflow-hidden group">
-          {/* Aesthetic background */}
-          <div className="absolute inset-0 bg-slate-50/50" />
-          <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-30" />
-          
-          <div className="z-10 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 ring-4 ring-white shadow-xl group-hover:scale-110 transition-transform duration-500">
-               <Activity size={32} className="text-slate-400" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-800">Advanced Telemetry Offline</h3>
-            <p className="mt-2 max-w-[280px] text-sm text-slate-500">Historical document parsing matrices require more than 30 days of standard payload rendering.</p>
-            <button className="mt-6 rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow-md transition-colors hover:bg-slate-800">
-               Export Base Metrics
-            </button>
-          </div>
-        </div>
+      {/* Quick links */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'User Management', desc: 'Manage accounts', path: '/admin/users' },
+          { label: 'Review Queue', desc: `${stats.pending_reviews ?? 0} pending`, path: '/admin/documents?tab=review_pending' },
+          { label: 'Quarantine', desc: `${stats.quarantined_pending ?? 0} flagged`, path: '/admin/documents' },
+          { label: 'Activity Log', desc: 'Audit trail', path: '/admin/logs' },
+        ].map(link => (
+          <button key={link.path} onClick={() => navigate(link.path)}
+            className="bg-white border border-gray-200 rounded-xl px-4 py-3.5 text-left hover:bg-gray-50 transition-colors group">
+            <p className="text-sm font-semibold text-gray-700 group-hover:text-gray-900">{link.label}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{link.desc}</p>
+          </button>
+        ))}
       </div>
     </div>
   );
