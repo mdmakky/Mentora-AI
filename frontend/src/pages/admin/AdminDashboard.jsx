@@ -44,7 +44,10 @@ const AdminDashboard = () => {
 
   if (!stats) return null;
 
-  const hasPendingActions = stats.pending_reviews > 0 || stats.quarantined_pending > 0;
+  const hasPendingActions =
+    (stats.pending_reviews ?? 0) > 0 ||
+    (stats.quarantined_pending ?? 0) > 0 ||
+    (stats.pending_suspension_appeals ?? 0) > 0;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 sm:px-6 space-y-6">
@@ -61,6 +64,23 @@ const AdminDashboard = () => {
       {/* Action Banners */}
       {hasPendingActions && (
         <div className="flex flex-col sm:flex-row gap-3">
+          {(stats.pending_suspension_appeals ?? 0) > 0 && (
+            <button
+              onClick={() => navigate('/admin/users')}
+              className="flex-1 flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3.5 text-left hover:bg-sky-100 transition-colors group"
+            >
+              <div className="flex items-center gap-3">
+                <Users size={16} className="text-sky-600 shrink-0" strokeWidth={2} />
+                <div>
+                  <p className="text-sm font-semibold text-sky-800">
+                    {stats.pending_suspension_appeals} suspension appeal{stats.pending_suspension_appeals !== 1 ? 's' : ''} pending
+                  </p>
+                  <p className="text-xs text-sky-500">Open User Management to review and decide</p>
+                </div>
+              </div>
+              <ArrowRight size={14} className="text-sky-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
+            </button>
+          )}
           {stats.pending_reviews > 0 && (
             <button
               onClick={() => navigate('/admin/documents?tab=review_pending')}
@@ -163,6 +183,7 @@ const AdminDashboard = () => {
         {[
           { label: 'User Management', desc: 'Manage accounts', path: '/admin/users' },
           { label: 'Review Queue', desc: `${stats.pending_reviews ?? 0} pending`, path: '/admin/documents?tab=review_pending' },
+          { label: 'Suspension Appeals', desc: `${stats.pending_suspension_appeals ?? 0} pending`, path: '/admin/users' },
           { label: 'Quarantine', desc: `${stats.quarantined_pending ?? 0} flagged`, path: '/admin/documents' },
           { label: 'Activity Log', desc: 'Audit trail', path: '/admin/logs' },
         ].map(link => (

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.dependencies import get_current_user
 from core.database import get_supabase_admin
 from pydantic import BaseModel, Field
+from services.notification_service import notify_admins
 
 router = APIRouter(prefix="/appeals", tags=["Appeals"])
 
@@ -38,19 +39,16 @@ async def submit_suspension_appeal(
     }).execute()
 
     # Notify all admins about the new appeal
-    admins = db.table("users").select("id").eq("is_admin", True).execute()
-    if admins.data:
-        name = user.get("full_name") or user.get("email", "A user")
-        notifications = [
-            {
-                "user_id": admin["id"],
-                "type": "review_submitted",
-                "title": "New Suspension Appeal",
-                "body": f"{name} has submitted a suspension appeal. Review it in User Management → Suspension Appeals.",
-            }
-            for admin in admins.data
-        ]
-        db.table("notifications").insert(notifications).execute()
+    name = user.get("full_name") or user.get("email", "A user")
+    notify_admins(
+        "review_submitted",
+        "New Suspension Appeal",
+        f"{name} has submitted a suspension appeal. Review it in User Management -> Suspension Appeals.",
+        {
+            "user_id": user["id"],
+            "kind": "suspension_appeal",
+        },
+    )
 
     return {"message": "Appeal submitted successfully"}
 

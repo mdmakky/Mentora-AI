@@ -37,9 +37,28 @@ const AdminUsers = () => {
     }
   };
 
-  // Load appeal count on mount so badge is visible before clicking the tab
+  // Load appeal count on mount so badge is visible before clicking the tab.
   useEffect(() => { fetchAppeals(); }, []);
   useEffect(() => { if (tab === 'appeals') fetchAppeals(); }, [tab]);
+
+  // Keep pending appeal badge and list fresh even if no manual refresh happens.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchAppeals();
+    }, 30000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Refresh immediately when returning to the page/tab.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAppeals();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   const submitAppealDecision = async () => {
     if (!appealResponseModal) return;

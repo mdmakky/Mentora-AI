@@ -46,6 +46,13 @@ def get_system_stats() -> dict:
     except Exception:
         pending_reviews = 0
 
+    # Pending suspension appeals — count only
+    try:
+        suspension_appeals = db.table("suspension_appeals").select("id", count="exact", head=True).eq("status", "pending").execute()
+        pending_suspension_appeals = suspension_appeals.count or 0
+    except Exception:
+        pending_suspension_appeals = 0
+
     # Total knowledge chunks — count only
     try:
         chunks_result = db.table("document_chunks").select("id", count="exact", head=True).execute()
@@ -76,6 +83,7 @@ def get_system_stats() -> dict:
         "total_documents": total_docs,
         "quarantined_pending": quarantined_count,
         "pending_reviews": pending_reviews,
+        "pending_suspension_appeals": pending_suspension_appeals,
         "suspended_users": suspended,
         "total_chunks": total_chunks,
         "total_courses": total_courses,

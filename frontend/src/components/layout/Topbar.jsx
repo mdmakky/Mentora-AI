@@ -59,6 +59,27 @@ const Topbar = ({ onMenuClick }) => {
     return () => supabase.removeChannel(channel);
   }, [user?.id, fetchNotifications]);
 
+  // Fallback polling keeps notifications fresh if realtime delivery is unavailable.
+  useEffect(() => {
+    if (!user?.id) return;
+    const intervalId = setInterval(() => {
+      fetchNotifications();
+    }, 30000);
+    return () => clearInterval(intervalId);
+  }, [user?.id, fetchNotifications]);
+
+  // Refresh notifications whenever the browser tab becomes visible again.
+  useEffect(() => {
+    if (!user?.id) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchNotifications();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [user?.id, fetchNotifications]);
+
   // When dropdown opens, refresh and mark all read after a short delay
   useEffect(() => {
     if (!notifOpen) return;
