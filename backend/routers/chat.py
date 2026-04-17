@@ -25,7 +25,7 @@ def _normalize_language(value: Optional[str]) -> str:
 
 def _normalize_response_mode(value: Optional[str]) -> str:
     mode = (value or "learn").strip().lower()
-    if mode in {"summary", "exam", "practice"}:
+    if mode in {"summary", "exam", "practice", "assignment"}:
         return mode
     return "learn"
 

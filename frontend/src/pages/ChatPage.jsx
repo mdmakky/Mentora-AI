@@ -11,6 +11,31 @@ import Spinner from '../components/ui/Spinner';
 import useStudySessionTracker from '../utils/useStudySessionTracker';
 import { readChatPreferences, writeChatPreferences } from '../utils/chatPreferences';
 
+const COACH_MODE_OPTIONS = [
+  { value: 'learn', label: 'Learn Concept' },
+  { value: 'exam', label: 'Exam Prep' },
+  { value: 'assignment', label: 'Assignment Help' },
+  { value: 'summary', label: 'Quick Summary' },
+  { value: 'practice', label: 'Practice Me' },
+];
+
+const COACH_ACTIONS = [
+  'Turn into notes',
+  'Generate quiz',
+  'Make flashcards',
+  'Save to revision list',
+  'Mark as weak topic',
+];
+
+const isDocumentSession = (title = '') => typeof title === 'string' && title.startsWith('DOC::');
+const isCoachSession = (title = '') => !isDocumentSession(title);
+const stripCoachPrefix = (title = '') => {
+  if (typeof title !== 'string') return 'Study Session';
+  if (!title.startsWith('COACH::')) return title || 'Study Session';
+  const clean = title.slice('COACH::'.length).trim();
+  return clean || 'Study Session';
+};
+
 const ChatPage = () => {
   const {
     sessions, activeSessionId, messages, sending,
@@ -27,32 +52,34 @@ const ChatPage = () => {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
+  const normalizedMode = preferences.responseMode === 'assignment' ? 'learn' : preferences.responseMode;
+
   const starterPrompts = {
     learn: [
-      { q: 'Teach me this topic in simple words', icon: '🧠' },
-      { q: 'Explain the most important concepts from this course', icon: '💡' },
-      { q: 'What should I understand first before the exam?', icon: '🎯' },
-      { q: 'Give me a quick example-based explanation', icon: '🧪' },
+      { q: 'Teach me this topic from beginner level', icon: '🧠' },
+      { q: 'Explain this like I have 5 minutes before class', icon: '⏱️' },
+      { q: 'What should I understand first before diving deeper?', icon: '🎯' },
+      { q: 'Give one real-world example for this concept', icon: '🧪' },
     ],
     summary: [
-      { q: 'Summarize my latest lecture notes', icon: '📝' },
-      { q: 'Create a short revision summary for this course', icon: '📚' },
-      { q: 'List the key takeaways from my uploaded materials', icon: '📌' },
-      { q: 'Give me a last-minute study cheat sheet', icon: '⚡' },
+      { q: 'Create a 2-minute recap of this course', icon: '⚡' },
+      { q: 'Summarize the most important points from my uploads', icon: '📝' },
+      { q: 'Give a quick revision sheet with key terms', icon: '📚' },
+      { q: 'List only what I must remember for exam', icon: '📌' },
     ],
     exam: [
-      { q: 'Generate an exam-focused revision plan', icon: '📅' },
-      { q: 'Which topics are most likely important for the exam?', icon: '🔥' },
+      { q: 'Generate an exam-focused revision plan for this week', icon: '📅' },
+      { q: 'Find important exam topics from my uploads', icon: '🔥' },
       { q: 'Give me viva-style answers from my course materials', icon: '🎤' },
-      { q: 'What should I memorize from these materials?', icon: '🧷' },
+      { q: 'Test me on high-priority exam areas', icon: '🧷' },
     ],
     practice: [
-      { q: 'Generate practice questions for the exam', icon: '📋' },
-      { q: 'Quiz me on this course step by step', icon: '❓' },
-      { q: 'Ask me 5 short questions from my materials', icon: '🧩' },
-      { q: 'Check my understanding of the core topics', icon: '✅' },
+      { q: 'Generate practice questions and wait for my answers', icon: '📋' },
+      { q: 'Quiz me step by step and score me at the end', icon: '❓' },
+      { q: 'Ask 5 short questions from my materials', icon: '🧩' },
+      { q: 'Check my understanding and tell weak areas', icon: '✅' },
     ],
-  }[preferences.responseMode];
+  }[normalizedMode];
 
   // Load semesters and courses
   useEffect(() => {
@@ -78,6 +105,8 @@ const ChatPage = () => {
       fetchSessions();
     }
   }, [selectedCourse, fetchSessions]);
+
+  const coachSessions = sessions.filter((s) => isCoachSession(s.title));
 
   // Auto-scroll
   useEffect(() => {
@@ -124,22 +153,28 @@ const ChatPage = () => {
     }
     const courseId = selectedCourse || allCourses[0]?.id;
     if (!courseId) return;
-    await createSession(courseId, 'New Chat');
+    await createSession(courseId, 'COACH::New Study Session');
   };
 
   const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
 
-    if (!activeSessionId) {
+    const currentSession = coachSessions.find((s) => s.id === activeSessionId);
+
+    if (!currentSession) {
       const courseId = selectedCourse || allCourses[0]?.id;
       if (!courseId) return;
-      const result = await createSession(courseId, trimmed.slice(0, 50));
+      const result = await createSession(courseId, `COACH::${trimmed.slice(0, 50)}`);
       if (!result.success) return;
     }
 
     setText('');
-    await sendMessage(trimmed, null, preferences);
+    await sendMessage(trimmed, null, {
+      ...preferences,
+      responseMode: normalizedMode,
+      retrievalScope: 'whole_course',
+    });
   };
 
   const handlePreferenceChange = (key, value) => {
@@ -156,7 +191,7 @@ const ChatPage = () => {
     }
   };
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeSession = coachSessions.find((s) => s.id === activeSessionId);
   const activeCourseInfo = allCourses.find((c) => c.id === activeSession?.course_id);
 
   useStudySessionTracker({
@@ -187,7 +222,7 @@ const ChatPage = () => {
         {/* Sidebar Header */}
         <div className="p-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-bold text-slate-800">Chat Sessions</h2>
+            <h2 className="text-sm font-bold text-slate-800">Study Workspaces</h2>
             <button
               onClick={handleNewSession}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-600 hover:bg-emerald-50 transition"
@@ -196,6 +231,10 @@ const ChatPage = () => {
               <Plus size={16} />
             </button>
           </div>
+
+          <p className="text-[10px] text-slate-400 mb-3">
+            Course-level planning, revision, and practice sessions.
+          </p>
 
           {/* Course filter */}
           <select
@@ -218,14 +257,14 @@ const ChatPage = () => {
             <div className="flex justify-center py-8">
               <Spinner size="sm" />
             </div>
-          ) : sessions.length === 0 ? (
+          ) : coachSessions.length === 0 ? (
             <div className="text-center py-8">
               <MessagesSquare size={24} className="text-slate-200 mx-auto mb-2" />
-              <p className="text-xs text-slate-400">No chat sessions yet</p>
-              <p className="text-xs text-slate-400 mt-1">Start a new chat to begin</p>
+              <p className="text-xs text-slate-400">No Study Coach sessions yet</p>
+              <p className="text-xs text-slate-400 mt-1">Start one to plan, revise, or practice</p>
             </div>
           ) : (
-            sessions.map((s) => (
+            coachSessions.map((s) => (
               <div
                 key={s.id}
                 className={`group flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition mb-0.5 ${
@@ -238,7 +277,7 @@ const ChatPage = () => {
                   onClick={() => selectSession(s.id)}
                   className="text-xs font-medium truncate flex-1 text-left"
                 >
-                  {s.title}
+                  {stripCoachPrefix(s.title)}
                 </button>
                 <button
                   onClick={(e) => {
@@ -268,7 +307,7 @@ const ChatPage = () => {
           <Sparkles size={16} className="text-violet-500 shrink-0" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">
-              {activeSession?.title || 'Mentora AI Chat'}
+              {activeSession ? stripCoachPrefix(activeSession.title) : 'Mentora Study Coach'}
             </p>
             {activeCourseInfo && (
               <p className="text-[10px] text-slate-400 truncate flex items-center gap-1">
@@ -282,20 +321,70 @@ const ChatPage = () => {
         <ChatPreferencesBar
           preferences={preferences}
           onChange={handlePreferenceChange}
-          scopeLabel={selectedCourse ? 'Uses the selected course as context and keeps answers compact.' : 'Uses your available course materials and keeps token usage low.'}
+          scopeLabel={selectedCourse ? 'Study Coach is using the selected course context for planning, revision, and practice.' : 'Study Coach can use your course materials and wider context for guidance.'}
+          modeOptions={COACH_MODE_OPTIONS}
+          renderExtraControls={() => (
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 px-1">
+                Learning Actions
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {COACH_ACTIONS.map((action) => (
+                  <button
+                    key={action}
+                    type="button"
+                    onClick={() => setText(`${action}: ${text || 'based on my current course context'}`)}
+                    className="px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition"
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         />
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6">
-          {!activeSessionId ? (
+          {!activeSession ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center py-20">
               <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-5">
                 <Sparkles size={28} className="text-violet-500" />
               </div>
               <h2 className="text-xl font-bold text-slate-800 mb-2">Mentora Study Coach</h2>
               <p className="text-sm text-slate-500 max-w-sm mb-8">
-                Ask for simple explanations, summaries, exam help, or practice questions from your course materials.
+                Plan, revise, and practice across your courses with a single Study Coach workspace.
               </p>
+
+              <div className="w-full max-w-3xl mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+                {[
+                  {
+                    title: 'Build a Plan',
+                    desc: 'Create a revision timeline and focus topics for this week.',
+                    cta: 'Create my 7-day revision plan',
+                  },
+                  {
+                    title: 'Run Practice',
+                    desc: 'Generate quizzes and track where you are weak.',
+                    cta: 'Test me on this course now',
+                  },
+                  {
+                    title: 'Assignment Support',
+                    desc: 'Get outline + key points for assignments using your materials.',
+                    cta: 'Help me draft assignment structure',
+                  },
+                ].map((item) => (
+                  <button
+                    key={item.title}
+                    onClick={() => setText(item.cta)}
+                    className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-200 hover:bg-emerald-50/50 transition"
+                  >
+                    <p className="text-sm font-semibold text-slate-800 mb-1">{item.title}</p>
+                    <p className="text-xs text-slate-500 leading-relaxed">{item.desc}</p>
+                  </button>
+                ))}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full">
                 {starterPrompts.map(({ q, icon }) => (
                   <button
@@ -318,7 +407,7 @@ const ChatPage = () => {
           ) : messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center py-20">
               <MessagesSquare size={36} className="text-slate-200 mb-3" />
-              <p className="text-sm text-slate-400">Send a message to start chatting</p>
+              <p className="text-sm text-slate-400">Send a message to start your study workflow</p>
             </div>
           ) : (
             <>

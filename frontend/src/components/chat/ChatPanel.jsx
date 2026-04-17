@@ -7,6 +7,13 @@ import ChatPreferencesBar from './ChatPreferencesBar';
 import Spinner from '../ui/Spinner';
 import { readChatPreferences, writeChatPreferences } from '../../utils/chatPreferences';
 
+const READING_MODE_OPTIONS = [
+  { value: 'learn', label: 'Explain' },
+  { value: 'summary', label: 'Summarize' },
+  { value: 'exam', label: 'Viva' },
+  { value: 'practice', label: 'Practice' },
+];
+
 const CHAT_SESSION_KEY = 'mentora-chat-session-map';
 
 const readSessionMap = () => {
@@ -41,17 +48,33 @@ const ChatPanel = ({ courseId, documentId, documentName, currentPage, onCitation
   const sessionPrefix = documentId ? `DOC::${documentId}::` : '';
 
   const starterPrompts = {
-    learn: ['Explain this topic simply', 'What should I understand first?', 'Give me a quick example'],
-    summary: ['Summarize this document', 'Give me the key takeaways', 'Create a short revision note'],
-    exam: ['What is exam important here?', 'Give me viva-style points', 'What should I memorize from this?'],
-    practice: ['Ask me 3 practice questions', 'Test my understanding', 'Give me short quiz questions'],
-  }[preferences.responseMode] || ['Summarize this document', 'Explain the key concepts', 'What are the main findings?'];
+    learn: [
+      `Explain page ${currentPage || 1} simply`,
+      'Define difficult terms from this page',
+      'Explain this slide in beginner language',
+    ],
+    summary: [
+      `Summarize page ${currentPage || 1}`,
+      'Give key points from current section',
+      'Create quick revision bullets',
+    ],
+    exam: [
+      `Give 3 viva questions from page ${currentPage || 1}`,
+      'What should I remember for exam from this section?',
+      'Give likely viva follow-ups',
+    ],
+    practice: [
+      'Ask me 3 short questions from this page',
+      'Test my understanding of this section',
+      'Give model answers after questions',
+    ],
+  }[preferences.responseMode] || ['Explain this page simply', 'Summarize this section', 'Give viva questions from this page'];
 
   const formatSessionTitle = (rawTitle) => {
-    if (!documentId || typeof rawTitle !== 'string') return rawTitle || 'AI Chat';
-    if (!rawTitle.startsWith(sessionPrefix)) return rawTitle || 'AI Chat';
+    if (!documentId || typeof rawTitle !== 'string') return rawTitle || 'Reading Assistant';
+    if (!rawTitle.startsWith(sessionPrefix)) return rawTitle || 'Reading Assistant';
     const clean = rawTitle.slice(sessionPrefix.length).trim();
-    return clean || 'AI Chat';
+    return clean || 'Reading Assistant';
   };
 
   const documentSessions = documentId
@@ -254,9 +277,10 @@ const ChatPanel = ({ courseId, documentId, documentName, currentPage, onCitation
       <ChatPreferencesBar
         preferences={preferences}
         onChange={handlePreferenceChange}
-        scopeLabel="Focused on this document. Uses one low-cost answer per message."
+        scopeLabel="Reading assistant for this document. Best for page-level understanding and cited explanations."
         compact
         closeSignal={controlsCloseSignal}
+        modeOptions={READING_MODE_OPTIONS}
         renderExtraControls={() => (
           <>
             <div className="flex items-center gap-2">
@@ -302,7 +326,7 @@ const ChatPanel = ({ courseId, documentId, documentName, currentPage, onCitation
             </div>
             <h3 className="text-base font-bold text-slate-800 mb-2">Study this document with AI</h3>
             <p className="text-sm text-slate-500 mb-6 max-w-60">
-              Ask for a summary, simple explanation, exam help, or practice questions from this PDF.
+              Ask this reading assistant to explain this page, summarize sections, and generate viva or practice from the current content.
             </p>
             <div className="space-y-2 w-full max-w-65">
               {starterPrompts.map((q) => (

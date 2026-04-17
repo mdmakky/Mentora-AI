@@ -27,6 +27,7 @@ const ChatPreferencesBar = ({
   compact = false,
   renderExtraControls,
   closeSignal,
+  modeOptions,
 }) => {
   const [expanded, setExpanded] = useState(false);
 
@@ -36,11 +37,14 @@ const ChatPreferencesBar = ({
   }, [closeSignal]);
 
   const labels = useMemo(() => {
+    const activeModeOptions = modeOptions || MODE_OPTIONS;
     const language = LANGUAGE_OPTIONS.find((option) => option.value === preferences.language)?.label || 'English';
-    const mode = MODE_OPTIONS.find((option) => option.value === preferences.responseMode)?.label || 'Learn';
+    const mode = activeModeOptions.find((option) => option.value === preferences.responseMode)?.label || 'Learn';
     const detail = DETAIL_OPTIONS.find((option) => option.value === preferences.explanationLevel)?.label || 'Balanced';
     return { language, mode, detail };
-  }, [preferences]);
+  }, [preferences, modeOptions]);
+
+  const activeModeOptions = modeOptions || MODE_OPTIONS;
 
   const controlClassName = compact
     ? 'min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 outline-none transition focus:border-emerald-500'
@@ -104,7 +108,7 @@ const ChatPreferencesBar = ({
               className={controlClassName}
               aria-label="Chat mode"
             >
-              {MODE_OPTIONS.map((option) => (
+              {activeModeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

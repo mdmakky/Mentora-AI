@@ -21,7 +21,7 @@ import { apiClient } from '../../lib/apiClient';
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/courses', label: 'My Courses', icon: BookOpen },
-  { to: '/chat', label: 'AI Chat', icon: MessageSquare },
+  { to: '/chat', label: 'Study Coach', icon: MessageSquare },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
 ];
 

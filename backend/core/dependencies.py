@@ -1,9 +1,13 @@
+import logging
+
+import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from core.security import decode_token
 from core.database import get_supabase_admin
 
 security = HTTPBearer()
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
@@ -35,7 +39,31 @@ async def get_current_user(
 
     # Fetch user from database
     db = get_supabase_admin()
-    result = db.table("users").select("*").eq("id", user_id).single().execute()
+    try:
+        result = db.table("users").select("*").eq("id", user_id).single().execute()
+    except httpx.HTTPError as exc:
+        logger.warning("Auth upstream unavailable while loading user %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable. Please try again.",
+        ) from exc
+    except Exception as exc:
+        msg = str(exc).lower()
+        transient_markers = [
+            "temporary failure in name resolution",
+            "name resolution",
+            "connecterror",
+            "connection refused",
+            "timed out",
+            "network is unreachable",
+        ]
+        if any(marker in msg for marker in transient_markers):
+            logger.warning("Auth upstream transient failure while loading user %s: %s", user_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service temporarily unavailable. Please try again.",
+            ) from exc
+        raise
 
     if not result.data:
         raise HTTPException(

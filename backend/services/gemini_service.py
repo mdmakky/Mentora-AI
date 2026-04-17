@@ -77,6 +77,7 @@ def _build_mode_instruction(response_mode: str, explanation_level: str, document
         "learn": "Focus on teaching the concept clearly and interactively.",
         "summary": "Focus on compressing the important points into a useful study summary.",
         "exam": "Focus on exam-oriented explanation, likely important points, and what to remember.",
+        "assignment": "Focus on assignment support: clarify requirements, propose structure, and suggest source-grounded talking points.",
         "practice": "Focus on helping the student practice. Include up to 3 short practice questions or checks when useful.",
     }
     detail_map = {
@@ -103,6 +104,7 @@ def _build_response_contract(language: str, response_mode: str) -> str:
         next_label = "Next steps"
 
     practice_line = "- If useful, end with up to 3 short practice questions." if response_mode == "practice" else ""
+    assignment_line = "- For assignment help, include: suggested outline, key arguments, and a source-backed starting draft." if response_mode == "assignment" else ""
 
     return f"""
 Response rules:
@@ -113,6 +115,7 @@ Response rules:
 - End with a short {next_label} section containing 2 or 3 actionable follow-up ideas.
 - Keep the full answer concise unless the student explicitly asks for detail.
 {practice_line}
+{assignment_line}
 """.strip()
 
 
