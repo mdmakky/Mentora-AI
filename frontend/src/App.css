@@ -459,6 +459,23 @@
     display: none;
   }
   .doc-view-chat {
+    width: clamp(300px, 40vw, 450px);
+    min-width: 300px;
+    max-width: 450px;
+    position: static;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    z-index: auto;
+    box-shadow: none;
+  }
+  .app-content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .doc-view-chat {
     width: 100%;
     min-width: unset;
     max-width: unset;
@@ -468,9 +485,6 @@
     bottom: 0;
     z-index: 35;
     box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
-  }
-  .app-content {
-    padding: 16px;
   }
 }
 
@@ -520,8 +534,9 @@
 
   .pdf-toolbar {
     padding: 0 8px;
-    gap: 8px;
+    gap: 4px;
     overflow-x: auto;
+    white-space: nowrap;
   }
 
   .pdf-toolbar-group {
@@ -530,8 +545,10 @@
   }
 
   .pdf-page-input {
-    width: 42px;
-    padding: 3px;
+    width: 56px;
+    min-height: 36px;
+    padding: 6px;
+    font-size: 14px;
   }
 
   .pdf-canvas-container {

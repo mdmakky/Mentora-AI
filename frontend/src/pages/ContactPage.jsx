@@ -46,7 +46,7 @@ export default function ContactPage() {
 
       <PublicNavbar />
 
-      <main className="relative z-10 mx-auto w-[min(980px,calc(100%-30px))] py-14 sm:py-20">
+      <main className="relative z-10 mx-auto w-[min(980px,calc(100%-24px))] sm:w-[min(980px,calc(100%-30px))] py-12 sm:py-20">
         <section className="text-center">
           {/* <span className="inline-flex items-center rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
             Contact Mentora
@@ -91,8 +91,8 @@ export default function ContactPage() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="grid gap-4">
-                <div className="grid gap-4 sm:grid-cols-2">
+              <form onSubmit={handleSubmit} className="grid gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                   <label className="grid gap-2 text-sm font-semibold text-slate-700">
                     Name
                     <input

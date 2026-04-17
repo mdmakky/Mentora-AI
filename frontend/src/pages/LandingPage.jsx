@@ -61,14 +61,14 @@ export default function LandingPage() {
 
       <PublicNavbar />
 
-      <main className="relative z-10 mx-auto w-[min(1160px,calc(100%-30px))]">
-        <section className="flex min-h-[calc(100vh-96px)] items-center py-10 sm:py-14">
+      <main className="relative z-10 mx-auto w-[min(1160px,calc(100%-24px))] sm:w-[min(1160px,calc(100%-30px))]">
+        <section className="flex min-h-[calc(100vh-96px)] items-center py-6 sm:py-10 md:py-14">
           <div className="mx-auto max-w-4xl text-center">
             {/* <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-emerald-700/20 bg-white/80 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-800">
               <Sparkles size={12} /> Welcome to Mentora
             </span> */}
 
-            <h1 className="font-['Sora'] text-4xl font-extrabold leading-[1.06] tracking-[-0.045em] text-slate-900 sm:text-6xl">
+            <h1 className="font-['Sora'] text-3xl font-extrabold leading-[1.08] tracking-[-0.04em] text-slate-900 sm:text-5xl lg:text-6xl">
               AI-Powered <span className="bg-linear-to-r from-green-900 via-lime-700 to-green-500 bg-clip-text text-transparent">Study</span> Assistant
             </h1>
 
@@ -198,7 +198,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="relative z-10 mx-auto w-[min(1160px,calc(100%-30px))] py-10 text-center text-sm text-slate-500">
+      <footer className="relative z-10 mx-auto w-[min(1160px,calc(100%-24px))] sm:w-[min(1160px,calc(100%-30px))] py-10 text-center text-sm text-slate-500">
         Mentora © {new Date().getFullYear()} · AI Study Platform
       </footer>
     </div>

@@ -126,8 +126,8 @@ const CourseView = () => {
     <div className="app-content animate-fade-in">
       {/* ── Course Header ── */}
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             <button
               onClick={() => navigate('/dashboard')}
               className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
@@ -149,7 +149,7 @@ const CourseView = () => {
           </div>
 
           {activeTab === 'documents' && (
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center gap-2 self-start sm:self-auto w-full sm:w-auto flex-wrap">
               <Button size="sm" variant="outline" className="rounded-full" onClick={() => setShowNewFolder(true)}>
                 <FolderPlus size={15} /> Folder
               </Button>

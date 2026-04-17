@@ -42,7 +42,7 @@ const GuidesPage = () => {
           {guides.map((guide) => (
             <article
               key={guide.slug}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
                 {guide.readingMinutes} min read

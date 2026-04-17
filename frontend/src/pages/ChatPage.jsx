@@ -44,7 +44,9 @@ const ChatPage = () => {
   } = useChatStore();
 
   const { semesters, courses, fetchSemesters, fetchCourses } = useCourseStore();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    typeof window !== 'undefined' ? window.innerWidth > 768 : true
+  );
   const [isMobile, setIsMobile] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [text, setText] = useState('');

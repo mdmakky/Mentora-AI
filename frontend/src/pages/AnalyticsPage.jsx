@@ -42,7 +42,7 @@ const AnalyticsPage = () => {
           <div className="h-4 w-64 bg-slate-200 rounded" />
         </div>
         
-        <div className="grid grid-cols-1 min-[430px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-8">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="card p-5">
               <div className="flex items-center gap-3 mb-3">
@@ -129,7 +129,7 @@ const AnalyticsPage = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 min-[430px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-8">
         <div className="card p-4 sm:p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
@@ -199,7 +199,8 @@ const AnalyticsPage = () => {
           <h3 className="text-sm font-bold text-slate-800 mb-1">Weekly Study Time</h3>
           <p className="text-xs text-slate-400 mb-4">Minutes studied per day this week</p>
           {weeklyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
+            <div className="min-h-60 sm:min-h-70">
+              <ResponsiveContainer width="100%" height={220}>
               <BarChart data={weeklyData} barSize={36}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis
@@ -229,7 +230,8 @@ const AnalyticsPage = () => {
                   fill="#059669"
                 />
               </BarChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           ) : (
             <div className="flex items-center justify-center h-65 text-slate-400 text-sm">
               No study data this week yet. Start studying to see your chart!
@@ -243,32 +245,34 @@ const AnalyticsPage = () => {
           <p className="text-xs text-slate-400 mb-4">Total study time per course</p>
           {courseStats.length > 0 ? (
             <>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={courseStats}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    dataKey="total_minutes"
-                    nameKey="course_name"
-                    paddingAngle={3}
-                  >
-                    {courseStats.map((entry, index) => (
-                      <Cell key={entry.course_id} fill={entry.color || PIE_COLORS[index % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: '12px',
-                      border: '1px solid #e2e8f0',
-                      fontSize: '12px',
-                    }}
-                    formatter={(value) => [`${formatTime(value)}`, 'Time']}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="min-h-52.5">
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={courseStats}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      dataKey="total_minutes"
+                      nameKey="course_name"
+                      paddingAngle={3}
+                    >
+                      {courseStats.map((entry, index) => (
+                        <Cell key={entry.course_id} fill={entry.color || PIE_COLORS[index % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid #e2e8f0',
+                        fontSize: '12px',
+                      }}
+                      formatter={(value) => [`${formatTime(value)}`, 'Time']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
               <div className="space-y-2 mt-2">
                 {courseStats.map((c, i) => (
                   <div key={c.course_id} className="flex items-center justify-between text-xs">

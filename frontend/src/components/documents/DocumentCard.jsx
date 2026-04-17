@@ -160,8 +160,8 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
           <p className="text-sm font-semibold text-slate-900 truncate group-hover:text-emerald-700 transition mb-1">
             {doc.file_name}
           </p>
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-500">
+          <div className="flex items-center justify-between flex-wrap gap-1.5">
+            <p className="text-xs text-slate-500 min-w-0">
               {formatSize(doc.file_size)} · {doc.page_count} pg
             </p>
             <div className="flex items-center gap-1.5">

@@ -63,7 +63,7 @@ const ChatPreferencesBar = ({
           Style
         </button>
 
-        <div className="flex items-center gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
           <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600 truncate">
             {labels.language}
           </span>

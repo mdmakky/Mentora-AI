@@ -280,8 +280,8 @@ const ProfilePage = () => {
       </div>
 
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
-        <div className="grid min-h-170 grid-cols-1 lg:grid-cols-[260px_1fr]">
-          <aside className="border-b border-slate-200 bg-slate-50/70 p-5 lg:border-b-0 lg:border-r">
+        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] lg:grid-cols-[240px_1fr]">
+          <aside className="border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5 md:border-b-0 md:border-r">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Settings</p>
               <h2 className="mt-2 text-lg font-bold text-slate-900">Your Workspace</h2>
@@ -310,7 +310,7 @@ const ProfilePage = () => {
             </div>
           </aside>
 
-          <section className="p-5 sm:p-7">
+          <section className="p-4 sm:p-6 lg:p-7">
             {activePanel === 'profile' ? (
               <>
                 <PanelHeader
