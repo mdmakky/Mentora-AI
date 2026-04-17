@@ -188,7 +188,7 @@ const DocumentView = () => {
             aria-label="Close document chat"
             onClick={() => setChatOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 top-24 rounded-t-3xl bg-white shadow-2xl flex flex-col overflow-hidden">
+          <div className="absolute inset-x-0 bottom-0 top-18 sm:top-22 rounded-t-3xl bg-white shadow-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
               <div>
                 <p className="text-sm font-semibold text-slate-800">Document Chat</p>
