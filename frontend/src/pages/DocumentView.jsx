@@ -15,6 +15,8 @@ const DocumentView = () => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [targetPage, setTargetPage] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [targetCitation, setTargetCitation] = useState(null);
   const { currentDoc, getDocument, getDocumentUrl, clearCurrentDoc } = useDocumentStore();
 
   useStudySessionTracker({
@@ -62,10 +64,20 @@ const DocumentView = () => {
     return () => mq.removeListener(onChange);
   }, []);
 
-  const handleCitationClick = (pageNumber) => {
+  const handleCitationClick = (citation) => {
+    const pageNumber = typeof citation === 'number' ? citation : citation?.pageNumber;
+    if (!pageNumber) return;
+
     setTargetPage(pageNumber);
+    setTargetCitation({
+      pageNumber,
+      excerpt: typeof citation === 'number' ? null : citation?.excerpt || null,
+    });
     // Reset after a tick so the same page can be clicked again
-    setTimeout(() => setTargetPage(null), 100);
+    setTimeout(() => {
+      setTargetPage(null);
+      setTargetCitation(null);
+    }, 1200);
   };
 
   if (loading) {
@@ -147,7 +159,12 @@ const DocumentView = () => {
           )}
         </div>
 
-        <PDFViewer url={pdfUrl} targetPage={targetPage} />
+        <PDFViewer
+          url={pdfUrl}
+          targetPage={targetPage}
+          targetCitation={targetCitation}
+          onVisiblePageChange={setCurrentPage}
+        />
       </div>
 
       {/* Chat Panel */}
@@ -158,6 +175,7 @@ const DocumentView = () => {
             courseId={currentDoc.course_id}
             documentId={currentDoc.id}
             documentName={currentDoc.file_name}
+            currentPage={currentPage}
             onCitationClick={handleCitationClick}
           />
         )}
@@ -189,6 +207,7 @@ const DocumentView = () => {
                 courseId={currentDoc.course_id}
                 documentId={currentDoc.id}
                 documentName={currentDoc.file_name}
+                currentPage={currentPage}
                 onCitationClick={handleCitationClick}
               />
             </div>

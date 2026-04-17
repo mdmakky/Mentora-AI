@@ -4,6 +4,7 @@ const DEFAULT_PREFERENCES = {
   language: 'en',
   responseMode: 'learn',
   explanationLevel: 'balanced',
+  retrievalScope: 'whole_document',
 };
 
 export const getDefaultChatPreferences = () => ({ ...DEFAULT_PREFERENCES });

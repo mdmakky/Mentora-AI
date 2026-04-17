@@ -7,7 +7,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // Set worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const PDFViewer = ({ url, targetPage }) => {
+const PDFViewer = ({ url, targetPage, targetCitation, onVisiblePageChange }) => {
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.2);
@@ -16,6 +16,15 @@ const PDFViewer = ({ url, targetPage }) => {
   const [showThumbnails, setShowThumbnails] = useState(false);
   const containerRef = useRef(null);
   const pageRefs = useRef({});
+
+  const clearCitationHighlight = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container
+      .querySelectorAll('.pdf-citation-highlight')
+      .forEach((el) => el.classList.remove('pdf-citation-highlight'));
+  }, []);
 
   const onDocumentLoad = ({ numPages }) => {
     setNumPages(numPages);
@@ -28,13 +37,47 @@ const PDFViewer = ({ url, targetPage }) => {
     }
   }, [targetPage, numPages]);
 
+  useEffect(() => {
+    if (!targetCitation?.pageNumber || !targetCitation?.excerpt) return;
+
+    const pageElement = pageRefs.current[targetCitation.pageNumber];
+    if (!pageElement) return;
+
+    const highlightToken = targetCitation.excerpt
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .split(' ')
+      .filter((token) => token.length >= 6)[0];
+
+    if (!highlightToken) return;
+
+    const timer = window.setTimeout(() => {
+      clearCitationHighlight();
+
+      const spans = pageElement.querySelectorAll('.react-pdf__Page__textContent span');
+      let highlighted = false;
+      spans.forEach((span) => {
+        if (highlighted) return;
+        const value = (span.textContent || '').toLowerCase();
+        if (value.includes(highlightToken)) {
+          span.classList.add('pdf-citation-highlight');
+          highlighted = true;
+          span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }, 260);
+
+    return () => window.clearTimeout(timer);
+  }, [targetCitation, clearCitationHighlight]);
+
   const scrollToPage = useCallback((page) => {
     setCurrentPage(page);
+    onVisiblePageChange?.(page);
     const el = pageRefs.current[page];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  }, []);
+  }, [onVisiblePageChange]);
 
   const handlePageChange = (page) => {
     const p = Math.max(1, Math.min(page, numPages));
@@ -86,10 +129,11 @@ const PDFViewer = ({ url, targetPage }) => {
       const el = pageRefs.current[i];
       if (el && el.offsetTop <= containerTop) {
         setCurrentPage(i);
+        onVisiblePageChange?.(i);
         break;
       }
     }
-  }, [numPages]);
+  }, [numPages, onVisiblePageChange]);
 
   return (
     <>

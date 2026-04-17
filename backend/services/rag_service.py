@@ -373,6 +373,8 @@ async def search_similar_chunks(
     user_id: str,
     course_id: str,
     document_ids: Optional[List[str]] = None,
+    page_numbers: Optional[List[int]] = None,
+    section_anchor_page: Optional[int] = None,
     top_k: int = 7,
     course_context: Optional[str] = None,
 ) -> List[dict]:
@@ -383,11 +385,17 @@ async def search_similar_chunks(
         query_embedding = generate_query_embedding(query, course_context=course_context)
 
         # Use Supabase RPC for vector similarity search
+        fetch_count = top_k
+        if page_numbers:
+            fetch_count = max(top_k * 2, top_k + 3)
+        elif section_anchor_page:
+            fetch_count = max(top_k * 2, top_k + 4)
+
         params = {
             "query_embedding": query_embedding,
             "match_user_id": user_id,
             "match_course_id": course_id,
-            "match_count": top_k,
+            "match_count": fetch_count,
         }
 
         if document_ids:
@@ -398,8 +406,26 @@ async def search_similar_chunks(
 
         # Filter out low-relevance chunks to reduce LLM noise
         filtered = [c for c in chunks if c.get("similarity", 1.0) >= SIMILARITY_THRESHOLD]
+
+        if page_numbers:
+            page_set = {int(p) for p in page_numbers if isinstance(p, int)}
+            scoped = [c for c in (filtered if filtered else chunks) if c.get("page_number") in page_set]
+            if scoped:
+                return scoped[:top_k]
+
+        if isinstance(section_anchor_page, int) and section_anchor_page > 0:
+            lower = max(1, section_anchor_page - 1)
+            upper = section_anchor_page + 1
+            scoped = [
+                c for c in (filtered if filtered else chunks)
+                if isinstance(c.get("page_number"), int) and lower <= c.get("page_number") <= upper
+            ]
+            if scoped:
+                return scoped[:top_k]
+
         # Fall back to all chunks if filtering removes everything (e.g., hash backend)
-        return filtered if filtered else chunks
+        base = filtered if filtered else chunks
+        return base[:top_k]
     except Exception as e:
         logger.error("Vector search or embedding error: %s", e)
         # Fallback: basic text search

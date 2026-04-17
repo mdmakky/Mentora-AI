@@ -27,6 +27,10 @@ class ChatMessageCreate(BaseModel):
     language: Optional[str] = "en"
     response_mode: Optional[str] = "learn"
     explanation_level: Optional[str] = "balanced"
+    retrieval_scope: Optional[str] = "whole_document"
+    current_page: Optional[int] = None
+    selected_pages: Optional[List[int]] = None
+    section_anchor_page: Optional[int] = None
 
 
 class ChatMessageResponse(BaseModel):
@@ -36,4 +40,5 @@ class ChatMessageResponse(BaseModel):
     content: str
     source_chunks: Optional[List[str]] = None
     source_docs: Optional[list] = None
+    response_meta: Optional[dict] = None
     created_at: Optional[str] = None

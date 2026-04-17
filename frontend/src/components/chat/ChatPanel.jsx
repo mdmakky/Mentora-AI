@@ -26,7 +26,7 @@ const writeSessionMap = (nextMap) => {
   }
 };
 
-const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
+const ChatPanel = ({ courseId, documentId, documentName, currentPage, onCitationClick }) => {
   const {
     sessions, activeSessionId, messages, sending,
     loadingSessions, loadingMessages,
@@ -35,6 +35,7 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
 
   const [showSessions, setShowSessions] = useState(false);
   const [preferences, setPreferences] = useState(() => readChatPreferences('document'));
+  const [selectedPagesInput, setSelectedPagesInput] = useState('');
   const messagesEndRef = useRef(null);
   const sessionPrefix = documentId ? `DOC::${documentId}::` : '';
 
@@ -120,6 +121,33 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
     }));
   };
 
+  const parseSelectedPages = (raw) => {
+    if (!raw || typeof raw !== 'string') return [];
+
+    const values = [];
+    const chunks = raw.split(',').map((part) => part.trim()).filter(Boolean);
+
+    chunks.forEach((chunk) => {
+      if (chunk.includes('-')) {
+        const [startRaw, endRaw] = chunk.split('-').map((part) => Number(part.trim()));
+        if (Number.isFinite(startRaw) && Number.isFinite(endRaw)) {
+          const lower = Math.max(1, Math.min(startRaw, endRaw));
+          const upper = Math.max(lower, Math.max(startRaw, endRaw));
+          for (let page = lower; page <= upper && values.length < 20; page += 1) {
+            if (!values.includes(page)) values.push(page);
+          }
+        }
+      } else {
+        const page = Number(chunk);
+        if (Number.isFinite(page) && page > 0 && !values.includes(page) && values.length < 20) {
+          values.push(page);
+        }
+      }
+    });
+
+    return values;
+  };
+
   const handleSend = async (content) => {
     if (!activeSessionId) {
       // Auto-create session on first message
@@ -128,7 +156,16 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
       const result = await createSession(courseId, title);
       if (!result.success) return;
     }
-    await sendMessage(content, documentId ? [documentId] : null, preferences);
+    const selectedPages = preferences.retrievalScope === 'selected_pages'
+      ? parseSelectedPages(selectedPagesInput)
+      : [];
+
+    await sendMessage(content, documentId ? [documentId] : null, {
+      ...preferences,
+      currentPage,
+      selectedPages,
+      sectionAnchorPage: currentPage,
+    });
   };
 
   const activeSession = documentSessions.find((s) => s.id === activeSessionId);
@@ -219,6 +256,35 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
         compact
       />
 
+      <div className="border-b border-slate-100 px-4 py-2 bg-white">
+        <div className="flex items-center gap-2">
+          <select
+            value={preferences.retrievalScope}
+            onChange={(event) => handlePreferenceChange('retrievalScope', event.target.value)}
+            className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 outline-none transition focus:border-emerald-500"
+            aria-label="Document retrieval scope"
+          >
+            <option value="current_page">Current page</option>
+            <option value="selected_pages">Selected pages</option>
+            <option value="current_section">Current section</option>
+            <option value="whole_document">Whole document</option>
+            <option value="whole_course">Whole course</option>
+          </select>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-500">
+            p.{currentPage || 1}
+          </span>
+        </div>
+
+        {preferences.retrievalScope === 'selected_pages' && (
+          <input
+            value={selectedPagesInput}
+            onChange={(event) => setSelectedPagesInput(event.target.value)}
+            className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700 outline-none transition focus:border-emerald-500 focus:bg-white"
+            placeholder="Selected pages (example: 2,4,8-10)"
+          />
+        )}
+      </div>
+
       {/* Messages */}
       <div className="chat-messages" onClick={() => setShowSessions(false)}>
         {!activeSessionId ? (
@@ -258,6 +324,7 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
                 key={msg.id}
                 message={msg}
                 onCitationClick={onCitationClick}
+                onFollowUpClick={handleSend}
               />
             ))}
             {sending && (

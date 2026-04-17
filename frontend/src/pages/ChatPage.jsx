@@ -323,7 +323,13 @@ const ChatPage = () => {
           ) : (
             <>
               {messages.map((msg) => (
-                <ChatMessage key={msg.id} message={msg} />
+                <ChatMessage
+                  key={msg.id}
+                  message={msg}
+                  onFollowUpClick={(prompt) => {
+                    setText(prompt);
+                  }}
+                />
               ))}
               {sending && (
                 <div className="chat-msg assistant">

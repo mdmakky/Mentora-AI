@@ -109,6 +109,10 @@ const useChatStore = create((set, get) => ({
         language: options.language || 'en',
         response_mode: options.responseMode || 'learn',
         explanation_level: options.explanationLevel || 'balanced',
+        retrieval_scope: options.retrievalScope || 'whole_document',
+        current_page: options.currentPage || null,
+        selected_pages: options.selectedPages || null,
+        section_anchor_page: options.sectionAnchorPage || null,
       };
       if (documentIds) payload.document_ids = documentIds;
 
@@ -147,6 +151,19 @@ const useChatStore = create((set, get) => ({
             content: documentIds
               ? "I couldn't answer from this document right now. Try a narrower question, switch to Summary mode, or retry in a moment."
               : "I couldn't generate a useful answer right now. Try again, simplify the prompt, or switch to Summary mode.",
+            response_meta: {
+              no_evidence: Boolean(documentIds),
+              follow_up_questions: [
+                'Search across whole course',
+                'Answer from general knowledge',
+                'Ask a narrower question',
+              ],
+              suggested_actions: [
+                'Search across whole course',
+                'Answer from general knowledge',
+                'Ask a narrower question',
+              ],
+            },
             created_at: new Date().toISOString(),
           },
         ],

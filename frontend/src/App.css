@@ -679,12 +679,18 @@
   font-size: 10px;
   color: #64748b;
   background: rgba(255, 255, 255, 0.9);
+  padding: 0 4px;
+  border-radius: 3px;
+}
 
 .citation-badge-icon {
   color: #94a3b8;
 }
-  padding: 0 4px;
-  border-radius: 3px;
+
+.pdf-citation-highlight {
+  background: #fef08a;
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.3);
 }
 
 /* ===== Course Tab Bar ===== */
