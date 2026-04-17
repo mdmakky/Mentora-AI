@@ -6,8 +6,10 @@ import {
 import useChatStore from '../stores/chatStore';
 import useCourseStore from '../stores/courseStore';
 import ChatMessage from '../components/chat/ChatMessage';
+import ChatPreferencesBar from '../components/chat/ChatPreferencesBar';
 import Spinner from '../components/ui/Spinner';
 import useStudySessionTracker from '../utils/useStudySessionTracker';
+import { readChatPreferences, writeChatPreferences } from '../utils/chatPreferences';
 
 const ChatPage = () => {
   const {
@@ -21,8 +23,36 @@ const ChatPage = () => {
   const [isMobile, setIsMobile] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [text, setText] = useState('');
+  const [preferences, setPreferences] = useState(() => readChatPreferences('assistant'));
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  const starterPrompts = {
+    learn: [
+      { q: 'Teach me this topic in simple words', icon: '🧠' },
+      { q: 'Explain the most important concepts from this course', icon: '💡' },
+      { q: 'What should I understand first before the exam?', icon: '🎯' },
+      { q: 'Give me a quick example-based explanation', icon: '🧪' },
+    ],
+    summary: [
+      { q: 'Summarize my latest lecture notes', icon: '📝' },
+      { q: 'Create a short revision summary for this course', icon: '📚' },
+      { q: 'List the key takeaways from my uploaded materials', icon: '📌' },
+      { q: 'Give me a last-minute study cheat sheet', icon: '⚡' },
+    ],
+    exam: [
+      { q: 'Generate an exam-focused revision plan', icon: '📅' },
+      { q: 'Which topics are most likely important for the exam?', icon: '🔥' },
+      { q: 'Give me viva-style answers from my course materials', icon: '🎤' },
+      { q: 'What should I memorize from these materials?', icon: '🧷' },
+    ],
+    practice: [
+      { q: 'Generate practice questions for the exam', icon: '📋' },
+      { q: 'Quiz me on this course step by step', icon: '❓' },
+      { q: 'Ask me 5 short questions from my materials', icon: '🧩' },
+      { q: 'Check my understanding of the core topics', icon: '✅' },
+    ],
+  }[preferences.responseMode];
 
   // Load semesters and courses
   useEffect(() => {
@@ -84,6 +114,10 @@ const ChatPage = () => {
     return () => mq.removeListener(onChange);
   }, []);
 
+  useEffect(() => {
+    writeChatPreferences('assistant', preferences);
+  }, [preferences]);
+
   const handleNewSession = async () => {
     if (!selectedCourse && allCourses.length > 0) {
       setSelectedCourse(allCourses[0].id);
@@ -105,7 +139,14 @@ const ChatPage = () => {
     }
 
     setText('');
-    await sendMessage(trimmed);
+    await sendMessage(trimmed, null, preferences);
+  };
+
+  const handlePreferenceChange = (key, value) => {
+    setPreferences((current) => ({
+      ...current,
+      [key]: value,
+    }));
   };
 
   const handleKeyDown = (e) => {
@@ -238,6 +279,12 @@ const ChatPage = () => {
           </div>
         </div>
 
+        <ChatPreferencesBar
+          preferences={preferences}
+          onChange={handlePreferenceChange}
+          scopeLabel={selectedCourse ? 'Uses the selected course as context and keeps answers compact.' : 'Uses your available course materials and keeps token usage low.'}
+        />
+
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6">
           {!activeSessionId ? (
@@ -245,17 +292,12 @@ const ChatPage = () => {
               <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-5">
                 <Sparkles size={28} className="text-violet-500" />
               </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Mentora AI Chat</h2>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Mentora Study Coach</h2>
               <p className="text-sm text-slate-500 max-w-sm mb-8">
-                Ask questions about your course materials. I use your uploaded documents to provide accurate, cited answers.
+                Ask for simple explanations, summaries, exam help, or practice questions from your course materials.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full">
-                {[
-                  { q: 'Summarize my latest lecture notes', icon: '📝' },
-                  { q: 'Explain the key concepts from Chapter 3', icon: '💡' },
-                  { q: 'Generate practice questions for the exam', icon: '📋' },
-                  { q: 'What are the main findings in my paper?', icon: '🔍' },
-                ].map(({ q, icon }) => (
+                {starterPrompts.map(({ q, icon }) => (
                   <button
                     key={q}
                     onClick={() => {
@@ -304,7 +346,7 @@ const ChatPage = () => {
             <textarea
               ref={textareaRef}
               className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm resize-none outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition bg-slate-50 focus:bg-white min-h-12 max-h-35"
-              placeholder="Ask about your course materials..."
+              placeholder="Ask your study coach to explain, summarize, or quiz you..."
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={handleKeyDown}

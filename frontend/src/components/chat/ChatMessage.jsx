@@ -31,6 +31,7 @@ const ChatMessage = ({ message, onCitationClick }) => {
                 key={i}
                 docName={src.doc_name}
                 pageNumber={src.page_number}
+                excerpt={src.excerpt}
                 onClick={() => onCitationClick?.(src.page_number)}
               />
             ))}

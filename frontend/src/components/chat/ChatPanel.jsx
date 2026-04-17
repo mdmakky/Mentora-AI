@@ -3,7 +3,9 @@ import { Plus, Trash2, MessagesSquare, ChevronDown, Sparkles } from 'lucide-reac
 import useChatStore from '../../stores/chatStore';
 import ChatMessage from './ChatMessage';
 import MessageComposer from './MessageComposer';
+import ChatPreferencesBar from './ChatPreferencesBar';
 import Spinner from '../ui/Spinner';
+import { readChatPreferences, writeChatPreferences } from '../../utils/chatPreferences';
 
 const CHAT_SESSION_KEY = 'mentora-chat-session-map';
 
@@ -32,8 +34,16 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
   } = useChatStore();
 
   const [showSessions, setShowSessions] = useState(false);
+  const [preferences, setPreferences] = useState(() => readChatPreferences('document'));
   const messagesEndRef = useRef(null);
   const sessionPrefix = documentId ? `DOC::${documentId}::` : '';
+
+  const starterPrompts = {
+    learn: ['Explain this topic simply', 'What should I understand first?', 'Give me a quick example'],
+    summary: ['Summarize this document', 'Give me the key takeaways', 'Create a short revision note'],
+    exam: ['What is exam important here?', 'Give me viva-style points', 'What should I memorize from this?'],
+    practice: ['Ask me 3 practice questions', 'Test my understanding', 'Give me short quiz questions'],
+  }[preferences.responseMode] || ['Summarize this document', 'Explain the key concepts', 'What are the main findings?'];
 
   const formatSessionTitle = (rawTitle) => {
     if (!documentId || typeof rawTitle !== 'string') return rawTitle || 'AI Chat';
@@ -55,6 +65,10 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
     clearMessages();
     setShowSessions(false);
   }, [documentId, clearMessages]);
+
+  useEffect(() => {
+    writeChatPreferences('document', preferences);
+  }, [preferences]);
 
   useEffect(() => {
     if (!documentId || loadingSessions) return;
@@ -99,6 +113,13 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
     setShowSessions(false);
   };
 
+  const handlePreferenceChange = (key, value) => {
+    setPreferences((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  };
+
   const handleSend = async (content) => {
     if (!activeSessionId) {
       // Auto-create session on first message
@@ -107,7 +128,7 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
       const result = await createSession(courseId, title);
       if (!result.success) return;
     }
-    await sendMessage(content, documentId ? [documentId] : null);
+    await sendMessage(content, documentId ? [documentId] : null, preferences);
   };
 
   const activeSession = documentSessions.find((s) => s.id === activeSessionId);
@@ -191,6 +212,13 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
         </button>
       </div>
 
+      <ChatPreferencesBar
+        preferences={preferences}
+        onChange={handlePreferenceChange}
+        scopeLabel="Focused on this document. Uses one low-cost answer per message."
+        compact
+      />
+
       {/* Messages */}
       <div className="chat-messages" onClick={() => setShowSessions(false)}>
         {!activeSessionId ? (
@@ -198,12 +226,12 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
             <div className="w-14 h-14 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-4">
               <Sparkles size={24} className="text-violet-500" />
             </div>
-            <h3 className="text-base font-bold text-slate-800 mb-2">Ask about this document</h3>
+            <h3 className="text-base font-bold text-slate-800 mb-2">Study this document with AI</h3>
             <p className="text-sm text-slate-500 mb-6 max-w-60">
-              I can answer questions, summarize content, and explain concepts from your uploaded PDF.
+              Ask for a summary, simple explanation, exam help, or practice questions from this PDF.
             </p>
             <div className="space-y-2 w-full max-w-65">
-              {['Summarize this document', 'Explain the key concepts', 'What are the main findings?'].map((q) => (
+              {starterPrompts.map((q) => (
                 <button
                   key={q}
                   onClick={() => handleSend(q)}
@@ -248,7 +276,11 @@ const ChatPanel = ({ courseId, documentId, documentName, onCitationClick }) => {
       </div>
 
       {/* Composer */}
-      <MessageComposer onSend={handleSend} disabled={sending} />
+      <MessageComposer
+        onSend={handleSend}
+        disabled={sending}
+        placeholder={documentId ? 'Ask this document to explain, summarize, or quiz you...' : 'Ask a study question...'}
+      />
     </div>
   );
 };

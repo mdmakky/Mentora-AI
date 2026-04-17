@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import toast from 'react-hot-toast';
 import { apiClient } from '../lib/apiClient';
 
 const preserveDocumentPrefix = (existingTitle, nextTitle) => {
@@ -46,6 +47,7 @@ const useChatStore = create((set, get) => ({
       }));
       return { success: true, data };
     } catch (err) {
+      toast.error(err.message || 'Failed to create chat session');
       return { success: false, error: err.message };
     }
   },
@@ -60,6 +62,7 @@ const useChatStore = create((set, get) => ({
       });
     } catch (err) {
       console.error('Failed to load session:', err);
+      toast.error(err.message || 'Failed to load chat session');
       set({ loadingMessages: false });
     }
   },
@@ -76,12 +79,13 @@ const useChatStore = create((set, get) => ({
       });
       return { success: true };
     } catch (err) {
+      toast.error(err.message || 'Failed to delete chat session');
       return { success: false, error: err.message };
     }
   },
 
   // ─── Messages ────────────────────────────────
-  sendMessage: async (content, documentIds = null) => {
+  sendMessage: async (content, documentIds = null, options = {}) => {
     const { activeSessionId } = get();
     if (!activeSessionId) return { success: false, error: 'No active session' };
 
@@ -100,7 +104,12 @@ const useChatStore = create((set, get) => ({
     }));
 
     try {
-      const payload = { content };
+      const payload = {
+        content,
+        language: options.language || 'en',
+        response_mode: options.responseMode || 'learn',
+        explanation_level: options.explanationLevel || 'balanced',
+      };
       if (documentIds) payload.document_ids = documentIds;
 
       const aiMsg = await apiClient.post(
@@ -127,7 +136,23 @@ const useChatStore = create((set, get) => ({
 
       return { success: true, data: aiMsg };
     } catch (err) {
-      set({ sending: false });
+      const errorMessage = err.message || 'Failed to get AI response';
+      set((s) => ({
+        messages: [
+          ...s.messages,
+          {
+            id: `local-error-${Date.now()}`,
+            session_id: activeSessionId,
+            role: 'assistant',
+            content: documentIds
+              ? "I couldn't answer from this document right now. Try a narrower question, switch to Summary mode, or retry in a moment."
+              : "I couldn't generate a useful answer right now. Try again, simplify the prompt, or switch to Summary mode.",
+            created_at: new Date().toISOString(),
+          },
+        ],
+        sending: false,
+      }));
+      toast.error(errorMessage);
       return { success: false, error: err.message };
     }
   },

@@ -24,6 +24,9 @@ class ChatSessionResponse(BaseModel):
 class ChatMessageCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)
     document_ids: Optional[List[str]] = None
+    language: Optional[str] = "en"
+    response_mode: Optional[str] = "learn"
+    explanation_level: Optional[str] = "balanced"
 
 
 class ChatMessageResponse(BaseModel):

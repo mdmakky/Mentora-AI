@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send } from 'lucide-react';
 
-const MessageComposer = ({ onSend, disabled }) => {
+const MessageComposer = ({ onSend, disabled, placeholder = 'Ask a question...' }) => {
   const [text, setText] = useState('');
   const textareaRef = useRef(null);
 
@@ -33,7 +33,7 @@ const MessageComposer = ({ onSend, disabled }) => {
       <textarea
         ref={textareaRef}
         className="chat-input"
-        placeholder="Ask about this document..."
+        placeholder={placeholder}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}

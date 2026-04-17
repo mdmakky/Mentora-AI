@@ -14,6 +14,52 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
+def _normalize_language(value: Optional[str]) -> str:
+    language = (value or "en").strip().lower()
+    if language in {"bn", "bangla", "bengali"}:
+        return "bn"
+    if language == "auto":
+        return "auto"
+    return "en"
+
+
+def _normalize_response_mode(value: Optional[str]) -> str:
+    mode = (value or "learn").strip().lower()
+    if mode in {"summary", "exam", "practice"}:
+        return mode
+    return "learn"
+
+
+def _normalize_explanation_level(value: Optional[str]) -> str:
+    level = (value or "balanced").strip().lower()
+    if level in {"simple", "deep"}:
+        return level
+    return "balanced"
+
+
+def _pick_top_k(response_mode: str, explanation_level: str, document_ids: Optional[List[str]]) -> int:
+    top_k = 5 if document_ids else 6
+
+    if response_mode == "summary":
+        top_k += 1
+    elif response_mode == "practice":
+        top_k += 1
+
+    if explanation_level == "deep":
+        top_k += 1
+    elif explanation_level == "simple":
+        top_k -= 1
+
+    return max(4, min(top_k, 8))
+
+
+def _build_excerpt(text: Optional[str], limit: int = 160) -> str:
+    compact = " ".join((text or "").split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3].rstrip() + "..."
+
+
 def _build_auto_title(existing_title: str, user_content: str) -> str:
     """Preserve document prefix format when auto-generating first-message titles."""
     raw_title = user_content[:50] + ("..." if len(user_content) > 50 else "")
@@ -102,6 +148,9 @@ async def send_message(
         raise HTTPException(status_code=404, detail="Session not found")
 
     course_id = session.data["course_id"]
+    language = _normalize_language(data.language)
+    response_mode = _normalize_response_mode(data.response_mode)
+    explanation_level = _normalize_explanation_level(data.explanation_level)
 
     # Save user message
     user_msg = db.table("chat_messages").insert({
@@ -116,10 +165,11 @@ async def send_message(
         user_id=user["id"],
         course_id=course_id,
         document_ids=data.document_ids,
+        top_k=_pick_top_k(response_mode, explanation_level, data.document_ids),
     )
 
     # Get conversation history
-    history_result = db.table("chat_messages").select("role, content").eq("session_id", session_id).order("created_at").limit(10).execute()
+    history_result = db.table("chat_messages").select("role, content").eq("session_id", session_id).order("created_at").limit(6).execute()
     conversation_history = history_result.data or []
 
     # Generate AI response
@@ -127,6 +177,10 @@ async def send_message(
         question=data.content,
         context_chunks=chunks,
         conversation_history=conversation_history,
+        language=language,
+        response_mode=response_mode,
+        explanation_level=explanation_level,
+        document_scope=bool(data.document_ids),
     )
 
     # Extract source docs for citation
@@ -140,6 +194,7 @@ async def send_message(
                 "document_id": chunk.get("document_id"),
                 "doc_name": chunk.get("doc_name"),
                 "page_number": chunk.get("page_number"),
+                "excerpt": _build_excerpt(chunk.get("content")),
             })
 
     # Save AI message

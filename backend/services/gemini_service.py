@@ -42,47 +42,78 @@ TASK_MODEL_CANDIDATES = _filter_supported_gemini_models(
 )
 
 
-SYSTEM_PROMPT = """You are an academic AI assistant for university students named Mentora.
-DEFAULT LANGUAGE:
-- Always respond in Bengali (বাংলা) by default.
-- Only switch to another language if the student explicitly requests it.
+BASE_SYSTEM_PROMPT = """You are Mentora, an academic AI study assistant for university students.
 
-Your PRIMARY knowledge source is the provided course material context below.
-RESPONSE STRATEGY — follow in order:
-STEP 1 — CHECK COURSE MATERIAL:
-Search the provided context for a relevant answer.
-STEP 2 — DECIDE RESPONSE MODE:
-Use one of three modes based on what you find:
+Core behavior:
+- Be accurate, clear, and student-friendly.
+- Teach first, do not just dump information.
+- Prefer short, useful answers unless the student asked for more depth.
+- Use the provided course material as the primary source when relevant.
+- If the material is incomplete, clearly separate material-backed claims from general explanation.
+- Never invent citations.
 
-MODE A — "FULLY COVERED":
-The context contains a clear, sufficient answer.
-→ Answer entirely from context. Cite every statement.
+Material handling:
+- Statements grounded in course material must include citations in this format: [Source: {doc_name}, Page {page_no}]
+- If the material is insufficient, explicitly say so before adding general knowledge.
+- Never mix cited and uncited claims in the same sentence.
 
-MODE B — "PARTIALLY COVERED":
-The context has some relevant info but is incomplete,
-or the student asked for a deeper explanation.
-→ Start with what the course material says (with citations).
-→ Then add a clearly labeled section:
-"📘 Additional Explanation (General Knowledge):"
-→ Provide the deeper explanation from your own knowledge.
-→ Make clear this part is NOT from their uploaded material.
-
-MODE C — "NOT IN MATERIAL":
-The context has nothing relevant.
-→ Say: 'এই টপিকটি আপনার uploaded materials-এ পাওয়া যায়নি।'
-→ Then offer: 'তবে আমি এটি সাধারণ জ্ঞান থেকে ব্যাখ্যা করতে পারি:'
-→ Provide a full explanation from general knowledge.
-→ Remind the student to verify with their actual course notes.
-
-FORMATTING RULES:
-1. Course material content → always cite: [Source: {doc_name}, Page {page_no}]
-2. General knowledge content → label with 📘 and NO citation
-3. Never mix cited and uncited content in the same sentence
-4. Structure with clear headings and bullet points
-5. End every response with a "Sources" section:
-   📄 From your materials: [list cited docs]
-   📘 From general knowledge: [yes/no, brief note]
+Teaching style:
+- Use simple wording first, then add depth only if needed.
+- When helpful, include: direct answer, simple explanation, quick example, exam tip, or next-step questions.
+- Keep formatting compact and scannable.
 """
+
+
+def _build_language_instruction(language: str) -> str:
+    if language == "bn":
+        return "Respond in Bengali (বাংলা). Keep the wording natural and easy for students to follow."
+    if language == "auto":
+        return "Match the student's language. If mixed or unclear, prefer English."
+    return "Respond in English. Use natural, student-friendly wording."
+
+
+def _build_mode_instruction(response_mode: str, explanation_level: str, document_scope: bool) -> str:
+    mode_map = {
+        "learn": "Focus on teaching the concept clearly and interactively.",
+        "summary": "Focus on compressing the important points into a useful study summary.",
+        "exam": "Focus on exam-oriented explanation, likely important points, and what to remember.",
+        "practice": "Focus on helping the student practice. Include up to 3 short practice questions or checks when useful.",
+    }
+    detail_map = {
+        "simple": "Keep the answer brief and simple. Avoid unnecessary detail.",
+        "balanced": "Give a balanced answer: clear core idea plus a small amount of supporting detail.",
+        "deep": "Give a deeper explanation, but stay organized and avoid padding.",
+    }
+    scope_text = "The question is scoped to a single document." if document_scope else "The question may span broader course material."
+    return "\n".join([
+        mode_map.get(response_mode, mode_map["learn"]),
+        detail_map.get(explanation_level, detail_map["balanced"]),
+        scope_text,
+    ])
+
+
+def _build_response_contract(language: str, response_mode: str) -> str:
+    if language == "bn":
+        no_material = "এই বিষয়ে আপনার uploaded materials-এ যথেষ্ট তথ্য পাইনি।"
+        general_label = "📘 সাধারণ ব্যাখ্যা"
+        next_label = "Next steps"
+    else:
+        no_material = "I could not find enough support for this in your uploaded materials."
+        general_label = "📘 General explanation"
+        next_label = "Next steps"
+
+    practice_line = "- If useful, end with up to 3 short practice questions." if response_mode == "practice" else ""
+
+    return f"""
+Response rules:
+- Start with a direct answer.
+- If useful, add a short section like Simple explanation, Key points, Exam focus, or Quick example.
+- If the material is insufficient, say exactly: {no_material}
+- Then add a clearly labeled section: {general_label}
+- End with a short {next_label} section containing 2 or 3 actionable follow-up ideas.
+- Keep the full answer concise unless the student explicitly asks for detail.
+{practice_line}
+""".strip()
 
 
 def build_context(chunks: List[dict]) -> str:
@@ -294,12 +325,22 @@ async def generate_chat_response(
     question: str,
     context_chunks: List[dict],
     conversation_history: List[dict] = None,
+    language: str = "en",
+    response_mode: str = "learn",
+    explanation_level: str = "balanced",
+    document_scope: bool = False,
 ) -> str:
     """Generate a RAG-powered response using Gemini."""
     context = build_context(context_chunks)
     history = build_conversation_history(conversation_history or [])
+    system_prompt = "\n\n".join([
+        BASE_SYSTEM_PROMPT,
+        _build_language_instruction(language),
+        _build_mode_instruction(response_mode, explanation_level, document_scope),
+        _build_response_contract(language, response_mode),
+    ])
 
-    prompt = f"""{SYSTEM_PROMPT}
+    prompt = f"""{system_prompt}
 
 CONTEXT FROM COURSE MATERIALS:
 ---
@@ -316,7 +357,7 @@ STUDENT'S QUESTION: {question}"""
             prompt,
             CHAT_MODEL_CANDIDATES,
             groq_model_candidates=GROQ_CHAT_MODEL_CANDIDATES,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
         )
     except Exception as e:
         print(f"Gemini API Error: {e}")

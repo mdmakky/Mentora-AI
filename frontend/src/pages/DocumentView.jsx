@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { ArrowLeft, MessageSquare, PanelRightOpen, PanelRightClose, X } from 'lucide-react';
 import useDocumentStore from '../stores/documentStore';
 import PDFViewer from '../components/pdf/PDFViewer';
 import ChatPanel from '../components/chat/ChatPanel';
@@ -129,7 +129,13 @@ const DocumentView = () => {
             </p>
           </div>
           {isMobile ? (
-            <span className="text-[10px] font-medium text-slate-400 shrink-0">Chat off on mobile</span>
+            <button
+              onClick={() => setChatOpen((current) => !current)}
+              className="pdf-toolbar-btn shrink-0"
+              title={chatOpen ? 'Hide chat' : 'Open chat'}
+            >
+              <MessageSquare size={18} />
+            </button>
           ) : (
             <button
               onClick={() => setChatOpen(!chatOpen)}
@@ -156,6 +162,39 @@ const DocumentView = () => {
           />
         )}
       </div>
+
+      {isMobile && chatOpen && (
+        <div className="fixed inset-0 z-40 bg-slate-900/35 md:hidden">
+          <button
+            className="absolute inset-0"
+            aria-label="Close document chat"
+            onClick={() => setChatOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 top-24 rounded-t-3xl bg-white shadow-2xl flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Document Chat</p>
+                <p className="text-[11px] text-slate-400">Ask for explanations, summaries, or practice.</p>
+              </div>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <ChatPanel
+                key={`mobile-${currentDoc.id}`}
+                courseId={currentDoc.course_id}
+                documentId={currentDoc.id}
+                documentName={currentDoc.file_name}
+                onCitationClick={handleCitationClick}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
