@@ -1,10 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Plus, Trash2, MessagesSquare, Sparkles, Send, ChevronDown,
-  BookOpen, PanelLeftClose, PanelLeftOpen,
+  Plus, Trash2, MessagesSquare, Sparkles, Send,
+  BookOpen, PanelLeftClose, PanelLeftOpen, Download, Target, Flame, Pencil, Check, X,
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import useChatStore from '../stores/chatStore';
 import useCourseStore from '../stores/courseStore';
+import useStudyStore from '../stores/studyStore';
 import ChatMessage from '../components/chat/ChatMessage';
 import ChatPreferencesBar from '../components/chat/ChatPreferencesBar';
 import Spinner from '../components/ui/Spinner';
@@ -19,12 +22,12 @@ const COACH_MODE_OPTIONS = [
   { value: 'practice', label: 'Practice Me' },
 ];
 
-const COACH_ACTIONS = [
-  'Turn into notes',
-  'Generate quiz',
-  'Make flashcards',
-  'Save to revision list',
-  'Mark as weak topic',
+// Only real, wired actions — ghost ones removed
+const COACH_PROMPT_ACTIONS = [
+  { label: 'Generate quiz', prompt: 'Generate a 5-question quiz from my course materials and wait for my answers' },
+  { label: 'Make flashcards', prompt: 'Create 8 flashcard-style Q&A pairs from the key concepts in this course' },
+  { label: 'Revision bullets', prompt: 'Give me a concise revision bullet-point summary of the most important topics in this course' },
+  { label: 'Exam tips', prompt: 'What are the highest-priority topics and likely exam questions from my course materials?' },
 ];
 
 const isDocumentSession = (title = '') => typeof title === 'string' && title.startsWith('DOC::');
@@ -40,19 +43,26 @@ const ChatPage = () => {
   const {
     sessions, activeSessionId, messages, sending,
     loadingSessions, loadingMessages,
-    fetchSessions, createSession, selectSession, deleteSession, sendMessage,
+    fetchSessions, createSession, selectSession, deleteSession, sendMessage, exportSession, renameSession,
   } = useChatStore();
 
   const { semesters, courses, fetchSemesters, fetchCourses } = useCourseStore();
+  const { todayStats, fetchTodayStats } = useStudyStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [sidebarOpen, setSidebarOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth > 768 : true
   );
   const [isMobile, setIsMobile] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [text, setText] = useState('');
+  const [exportingSession, setExportingSession] = useState(false);
+  const [renamingSessionId, setRenamingSessionId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
   const [preferences, setPreferences] = useState(() => readChatPreferences('assistant'));
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const renameInputRef = useRef(null);
 
   const normalizedMode = preferences.responseMode === 'assignment' ? 'learn' : preferences.responseMode;
 
@@ -86,7 +96,14 @@ const ChatPage = () => {
   // Load semesters and courses
   useEffect(() => {
     fetchSemesters();
-  }, [fetchSemesters]);
+    fetchTodayStats();
+  }, [fetchSemesters, fetchTodayStats]);
+
+  // Pre-select course from URL param ?course=<id>
+  useEffect(() => {
+    const courseParam = searchParams.get('course');
+    if (courseParam) setSelectedCourse(courseParam);
+  }, [searchParams]);
 
   useEffect(() => {
     semesters.forEach((sem) => {
@@ -150,6 +167,10 @@ const ChatPage = () => {
   }, [preferences]);
 
   const handleNewSession = async () => {
+    if (allCourses.length === 0) {
+      toast.error('Add a course first before starting a Study Coach session.');
+      return;
+    }
     if (!selectedCourse && allCourses.length > 0) {
       setSelectedCourse(allCourses[0].id);
     }
@@ -158,9 +179,57 @@ const ChatPage = () => {
     await createSession(courseId, 'COACH::New Study Session');
   };
 
+  const handleCourseChange = (courseId) => {
+    setSelectedCourse(courseId || null);
+    setSearchParams(courseId ? { course: courseId } : {}, { replace: true });
+  };
+
+  const handleStartRename = (session, e) => {
+    e.stopPropagation();
+    setRenamingSessionId(session.id);
+    setRenameValue(stripCoachPrefix(session.title));
+    setTimeout(() => renameInputRef.current?.focus(), 0);
+  };
+
+  const handleRenameCommit = async (sessionId) => {
+    const trimmed = renameValue.trim();
+    if (trimmed) await renameSession(sessionId, trimmed);
+    setRenamingSessionId(null);
+    setRenameValue('');
+  };
+
+  const handleRenameKeyDown = (e, sessionId) => {
+    if (e.key === 'Enter') { e.preventDefault(); handleRenameCommit(sessionId); }
+    if (e.key === 'Escape') { setRenamingSessionId(null); setRenameValue(''); }
+  };
+
+  const handleExportSession = async () => {
+    if (!activeSessionId || exportingSession) return;
+    setExportingSession(true);
+    const result = await exportSession(activeSessionId);
+    setExportingSession(false);
+    if (result.success && result.data?.content) {
+      const blob = new Blob([result.data.content], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(result.data.title || 'study-session').replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Session exported as Markdown');
+    }
+  };
+
   const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
+
+    if (allCourses.length === 0) {
+      toast.error('Add a course first before starting a Study Coach session.');
+      return;
+    }
 
     const currentSession = coachSessions.find((s) => s.id === activeSessionId);
 
@@ -241,7 +310,7 @@ const ChatPage = () => {
           {/* Course filter */}
           <select
             value={selectedCourse || ''}
-            onChange={(e) => setSelectedCourse(e.target.value || null)}
+            onChange={(e) => handleCourseChange(e.target.value || null)}
             className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-emerald-500 transition bg-white"
           >
             <option value="">All Courses</option>
@@ -266,7 +335,7 @@ const ChatPage = () => {
               <p className="text-xs text-slate-400 mt-1">Start one to plan, revise, or practice</p>
             </div>
           ) : (
-            coachSessions.map((s) => (
+                      coachSessions.map((s) => (
               <div
                 key={s.id}
                 className={`group flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition mb-0.5 ${
@@ -275,21 +344,58 @@ const ChatPage = () => {
                     : 'hover:bg-slate-50 text-slate-700'
                 }`}
               >
-                <button
-                  onClick={() => selectSession(s.id)}
-                  className="text-xs font-medium truncate flex-1 text-left"
-                >
-                  {stripCoachPrefix(s.title)}
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteSession(s.id);
-                  }}
-                  className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 text-slate-300 hover:text-rose-500 ml-2 transition shrink-0"
-                >
-                  <Trash2 size={12} />
-                </button>
+                {renamingSessionId === s.id ? (
+                  <div className="flex items-center gap-1 flex-1 min-w-0">
+                    <input
+                      ref={renameInputRef}
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onBlur={() => handleRenameCommit(s.id)}
+                      onKeyDown={(e) => handleRenameKeyDown(e, s.id)}
+                      className="flex-1 min-w-0 text-xs rounded-md border border-emerald-300 bg-white px-2 py-1 outline-none focus:ring-2 focus:ring-emerald-100"
+                    />
+                    <button
+                      onMouseDown={(e) => { e.preventDefault(); handleRenameCommit(s.id); }}
+                      className="text-emerald-500 hover:text-emerald-700 shrink-0"
+                    >
+                      <Check size={12} />
+                    </button>
+                    <button
+                      onMouseDown={(e) => { e.preventDefault(); setRenamingSessionId(null); }}
+                      className="text-slate-300 hover:text-slate-500 shrink-0"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => selectSession(s.id)}
+                      className="text-xs font-medium truncate flex-1 text-left"
+                    >
+                      {stripCoachPrefix(s.title)}
+                    </button>
+                    <div className="flex items-center gap-0.5 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition shrink-0">
+                      <button
+                        onClick={(e) => handleStartRename(s, e)}
+                        className="text-slate-300 hover:text-slate-500 p-0.5"
+                        title="Rename"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSession(s.id);
+                        }}
+                        className="text-slate-300 hover:text-rose-500 p-0.5"
+                        title="Delete"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))
           )}
@@ -307,7 +413,7 @@ const ChatPage = () => {
             {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </button>
           <Sparkles size={16} className="text-violet-500 shrink-0" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-800 truncate">
               {activeSession ? stripCoachPrefix(activeSession.title) : 'Mentora Study Coach'}
             </p>
@@ -318,6 +424,35 @@ const ChatPage = () => {
               </p>
             )}
           </div>
+
+          {/* Today's goal progress pill */}
+          {todayStats && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 shrink-0" title="Today's study goal progress">
+              <Flame size={11} className={todayStats.total_minutes >= todayStats.goal_minutes ? 'text-amber-500' : 'text-slate-400'} />
+              <span className="text-[10px] font-semibold text-slate-600">
+                {todayStats.total_minutes}
+                <span className="text-slate-400 font-normal">/{todayStats.goal_minutes}m</span>
+              </span>
+              <div className="w-12 h-1 rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all"
+                  style={{ width: `${Math.min((todayStats.total_minutes / todayStats.goal_minutes) * 100, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Export button — only shown when a session is active */}
+          {activeSession && (
+            <button
+              onClick={handleExportSession}
+              disabled={exportingSession}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition shrink-0 disabled:opacity-50"
+              title="Export session as Markdown"
+            >
+              {exportingSession ? <Spinner size="sm" /> : <Download size={15} />}
+            </button>
+          )}
         </div>
 
         <ChatPreferencesBar
@@ -328,19 +463,30 @@ const ChatPage = () => {
           renderExtraControls={() => (
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400 px-1">
-                Learning Actions
+                Quick Actions
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {COACH_ACTIONS.map((action) => (
+                {COACH_PROMPT_ACTIONS.map((action) => (
                   <button
-                    key={action}
+                    key={action.label}
                     type="button"
-                    onClick={() => setText(`${action}: ${text || 'based on my current course context'}`)}
+                    onClick={() => setText(action.prompt)}
                     className="px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition"
                   >
-                    {action}
+                    {action.label}
                   </button>
                 ))}
+                {activeSession && (
+                  <button
+                    type="button"
+                    onClick={handleExportSession}
+                    disabled={exportingSession}
+                    className="px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-600 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-700 transition disabled:opacity-50 flex items-center gap-1"
+                  >
+                    <Download size={9} />
+                    Save as notes
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -358,49 +504,65 @@ const ChatPage = () => {
                 Plan, revise, and practice across your courses with a single Study Coach workspace.
               </p>
 
-              <div className="w-full max-w-3xl mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
-                {[
-                  {
-                    title: 'Build a Plan',
-                    desc: 'Create a revision timeline and focus topics for this week.',
-                    cta: 'Create my 7-day revision plan',
-                  },
-                  {
-                    title: 'Run Practice',
-                    desc: 'Generate quizzes and track where you are weak.',
-                    cta: 'Test me on this course now',
-                  },
-                  {
-                    title: 'Assignment Support',
-                    desc: 'Get outline + key points for assignments using your materials.',
-                    cta: 'Help me draft assignment structure',
-                  },
-                ].map((item) => (
-                  <button
-                    key={item.title}
-                    onClick={() => setText(item.cta)}
-                    className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-200 hover:bg-emerald-50/50 transition"
-                  >
-                    <p className="text-sm font-semibold text-slate-800 mb-1">{item.title}</p>
-                    <p className="text-xs text-slate-500 leading-relaxed">{item.desc}</p>
-                  </button>
-                ))}
-              </div>
+              {allCourses.length === 0 && !loadingSessions ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 max-w-sm text-left">
+                  <p className="text-sm font-semibold text-amber-800 mb-1">No courses found</p>
+                  <p className="text-xs text-amber-700">
+                    Go to <strong>Courses</strong> and add at least one course first. Study Coach needs a course to work with your materials.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="w-full max-w-3xl mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+                    {[
+                      {
+                        title: 'Build a Plan',
+                        desc: 'Create a revision timeline and focus topics for this week.',
+                        cta: 'Create my 7-day revision plan',
+                      },
+                      {
+                        title: 'Run Practice',
+                        desc: 'Generate quizzes and track where you are weak.',
+                        cta: 'Test me on this course now',
+                      },
+                      {
+                        title: 'Assignment Support',
+                        desc: 'Get outline + key points for assignments using your materials.',
+                        cta: 'Help me draft assignment structure',
+                      },
+                    ].map((item) => (
+                      <button
+                        key={item.title}
+                        onClick={() => setText(item.cta)}
+                        className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-200 hover:bg-emerald-50/50 transition"
+                      >
+                        <p className="text-sm font-semibold text-slate-800 mb-1">{item.title}</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">{item.desc}</p>
+                      </button>
+                    ))}
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full">
-                {starterPrompts.map(({ q, icon }) => (
-                  <button
-                    key={q}
-                    onClick={() => {
-                      setText(q);
-                    }}
-                    className="text-left text-sm px-4 py-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-start gap-2.5"
-                  >
-                    <span className="text-base">{icon}</span>
-                    <span>{q}</span>
-                  </button>
-                ))}
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full">
+                    {starterPrompts.map(({ q, icon }) => (
+                      <button
+                        key={q}
+                        onClick={() => setText(q)}
+                        className="text-left text-sm px-4 py-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-start gap-2.5"
+                      >
+                        <span className="text-base">{icon}</span>
+                        <span>{q}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <p className="text-xs text-slate-400 mt-6 flex items-center gap-1">
+                    <Target size={11} />
+                    {selectedCourse
+                      ? `Studying: ${allCourses.find((c) => c.id === selectedCourse)?.course_code || 'Selected course'}`
+                      : 'Select a course in the sidebar to focus your session'}
+                  </p>
+                </>
+              )}
             </div>
           ) : loadingMessages ? (
             <div className="flex items-center justify-center py-20">
@@ -410,6 +572,9 @@ const ChatPage = () => {
             <div className="flex flex-col items-center justify-center text-center py-20">
               <MessagesSquare size={36} className="text-slate-200 mb-3" />
               <p className="text-sm text-slate-400">Send a message to start your study workflow</p>
+              <p className="text-xs text-slate-300 mt-2 max-w-xs">
+                Tip: Upload PDFs in the Course View for course-grounded answers with citations.
+              </p>
             </div>
           ) : (
             <>

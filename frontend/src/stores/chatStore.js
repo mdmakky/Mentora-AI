@@ -174,6 +174,34 @@ const useChatStore = create((set, get) => ({
     }
   },
 
+  renameSession: async (sessionId, newTitle) => {
+    const coachTitle = typeof newTitle === 'string' && !newTitle.startsWith('COACH::')
+      ? `COACH::${newTitle.trim()}`
+      : newTitle.trim();
+    try {
+      await apiClient.put(`/chat/sessions/${sessionId}`, { title: coachTitle });
+      set((s) => ({
+        sessions: s.sessions.map((sess) =>
+          sess.id === sessionId ? { ...sess, title: coachTitle } : sess
+        ),
+      }));
+      return { success: true };
+    } catch (err) {
+      toast.error(err.message || 'Failed to rename session');
+      return { success: false, error: err.message };
+    }
+  },
+
+  exportSession: async (sessionId) => {
+    try {
+      const data = await apiClient.get(`/chat/${sessionId}/export`);
+      return { success: true, data };
+    } catch (err) {
+      toast.error(err.message || 'Failed to export session');
+      return { success: false, error: err.message };
+    }
+  },
+
   clearMessages: () => set({ messages: [], activeSessionId: null }),
 }));
 

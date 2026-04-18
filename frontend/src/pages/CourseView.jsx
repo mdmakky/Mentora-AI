@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft, Upload, FolderPlus, FileText, LayoutGrid, List, FlaskConical, Files,
+  ArrowLeft, Upload, FolderPlus, FileText, LayoutGrid, List, FlaskConical, Files, Sparkles,
 } from 'lucide-react';
 import useCourseStore from '../stores/courseStore';
 import useDocumentStore from '../stores/documentStore';
@@ -150,6 +150,14 @@ const CourseView = () => {
 
           {activeTab === 'documents' && (
             <div className="flex items-center gap-2 self-start sm:self-auto w-full sm:w-auto flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => navigate(`/chat?course=${courseId}`)}
+              >
+                <Sparkles size={15} /> Study Coach
+              </Button>
               <Button size="sm" variant="outline" className="rounded-full" onClick={() => setShowNewFolder(true)}>
                 <FolderPlus size={15} /> Folder
               </Button>

@@ -46,9 +46,13 @@ const ChatPreferencesBar = ({
 
   const activeModeOptions = modeOptions || MODE_OPTIONS;
 
-  const controlClassName = compact
-    ? 'min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 outline-none transition focus:border-emerald-500'
-    : 'min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 outline-none transition focus:border-emerald-500';
+  const detailBadge = {
+    simple: { label: 'low', cls: 'bg-emerald-50 text-emerald-700' },
+    balanced: { label: 'balanced', cls: 'bg-blue-50 text-blue-700' },
+    deep: { label: 'detailed', cls: 'bg-violet-50 text-violet-700' },
+  }[preferences.explanationLevel] || { label: 'balanced', cls: 'bg-blue-50 text-blue-700' };
+
+  const controlClassName = 'min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] font-medium text-slate-600 outline-none transition focus:border-emerald-500';
 
   return (
     <div className={compact ? 'relative border-b border-slate-100 px-3 py-2 bg-slate-50/80' : 'relative border-b border-slate-100 px-3 py-2 bg-slate-50/80'}>
@@ -75,8 +79,8 @@ const ChatPreferencesBar = ({
           </span>
         </div>
 
-        <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
-          low
+        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${detailBadge.cls}`}>
+          {detailBadge.label}
         </span>
       </div>
 

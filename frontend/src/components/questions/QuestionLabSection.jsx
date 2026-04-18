@@ -15,7 +15,7 @@ import Modal from '../ui/Modal';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import UploadModal from '../documents/UploadModal';
 
-const QUESTION_COUNTS = [5, 6, 7, 8];
+const QUESTION_COUNTS = [5, 10, 15, 20];
 const QUESTION_TYPES = [
   { value: 'broad', label: 'Broad / Essay', desc: 'Multi-part exam questions with sub-parts' },
   { value: 'short', label: 'Short Answer', desc: '2–4 mark concise questions' },

@@ -8,9 +8,25 @@ from services.rag_service import search_similar_chunks
 from services.gemini_service import generate_chat_response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from core.security import decode_token
 
 logger = logging.getLogger(__name__)
-limiter = Limiter(key_func=get_remote_address)
+
+
+def _rate_limit_key_by_user(request: Request) -> str:
+    """Use authenticated user-ID as rate limit key to avoid penalising shared IPs (e.g. university networks)."""
+    try:
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            payload = decode_token(auth[7:])
+            if payload and payload.get("sub"):
+                return f"uid:{payload['sub']}"
+    except Exception:
+        pass
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=_rate_limit_key_by_user)
 router = APIRouter(prefix="/chat", tags=["Chat"])
 
 
@@ -137,12 +153,14 @@ def _build_response_meta(
 
 
 def _build_auto_title(existing_title: str, user_content: str) -> str:
-    """Preserve document prefix format when auto-generating first-message titles."""
+    """Preserve COACH:: and DOC:: prefix formats when auto-generating first-message titles."""
     raw_title = user_content[:50] + ("..." if len(user_content) > 50 else "")
     if isinstance(existing_title, str) and existing_title.startswith("DOC::"):
         parts = existing_title.split("::", 2)
         if len(parts) == 3:
             return f"DOC::{parts[1]}::{raw_title}"
+    if isinstance(existing_title, str) and existing_title.startswith("COACH::"):
+        return f"COACH::{raw_title}"
     return raw_title
 
 
@@ -262,8 +280,8 @@ async def send_message(
         top_k=_pick_top_k(response_mode, explanation_level, scoped_document_ids),
     )
 
-    # Get conversation history
-    history_result = db.table("chat_messages").select("role, content").eq("session_id", session_id).order("created_at").limit(6).execute()
+    # Get conversation history (12 messages = 6 turns — enough context for a study session)
+    history_result = db.table("chat_messages").select("role, content").eq("session_id", session_id).order("created_at").limit(12).execute()
     conversation_history = history_result.data or []
 
     document_scoped = bool(scoped_document_ids)

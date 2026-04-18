@@ -73,11 +73,11 @@ const DocumentView = () => {
       pageNumber,
       excerpt: typeof citation === 'number' ? null : citation?.excerpt || null,
     });
-    // Reset after a tick so the same page can be clicked again
+    // Reset after enough time for the PDF to scroll and highlight
     setTimeout(() => {
       setTargetPage(null);
       setTargetCitation(null);
-    }, 1200);
+    }, 3000);
   };
 
   if (loading) {
