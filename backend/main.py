@@ -3,6 +3,7 @@ import os as _os
 if not _os.environ.get("TESSDATA_PREFIX"):
     for _p in (
         "/usr/share/tesseract-ocr/5/tessdata",
+        "/usr/share/tesseract-ocr/4.00/tessdata",
         "/usr/share/tesseract-ocr/4/tessdata",
         "/usr/share/tessdata",
     ):
