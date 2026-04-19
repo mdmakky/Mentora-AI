@@ -13,6 +13,8 @@ const useStudyStore = create(
   todayStats: null,
   loading: false,
   error: null,
+  sessionTypeStats: [],
+  weakTopicStats: [],
 
   // Fetch full study dashboard
   fetchDashboard: async () => {
@@ -110,6 +112,30 @@ const useStudyStore = create(
       return { success: false, error: err.message };
     }
   },
+
+  // Fetch session type breakdown (chat / document / quiz)
+  fetchSessionTypeStats: async () => {
+    try {
+      const data = await apiClient.get('/study/stats/session-types');
+      set({ sessionTypeStats: data || [] });
+      return data;
+    } catch (err) {
+      console.error('Failed to fetch session type stats:', err);
+      return null;
+    }
+  },
+
+  // Fetch weak-topic accuracy summary from question attempts
+  fetchWeakTopicStats: async () => {
+    try {
+      const data = await apiClient.get('/ai/questions/attempts/summary');
+      set({ weakTopicStats: data || [] });
+      return data;
+    } catch (err) {
+      console.error('Failed to fetch weak topic stats:', err);
+      return null;
+    }
+  },
 }),
     {
       name: 'mentora-study-store',
@@ -121,6 +147,8 @@ const useStudyStore = create(
         courseStats: state.courseStats,
         streak: state.streak,
         todayStats: state.todayStats,
+        sessionTypeStats: state.sessionTypeStats,
+        weakTopicStats: state.weakTopicStats,
       }),
     }
   )

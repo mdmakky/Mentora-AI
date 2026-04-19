@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 import useAuthStore from './stores/authStore';
 
 // Auth pages
@@ -50,6 +51,15 @@ function App() {
 
   return (
     <Router>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: { fontSize: '0.875rem', borderRadius: '10px', maxWidth: '360px' },
+          success: { iconTheme: { primary: '#059669', secondary: '#fff' } },
+          error: { iconTheme: { primary: '#dc2626', secondary: '#fff' } },
+        }}
+      />
       <Routes>
         {/* Public pages */}
         <Route path="/" element={

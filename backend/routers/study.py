@@ -199,6 +199,30 @@ async def get_streak(user: dict = Depends(get_current_user)):
     return calculate_streak(user["id"])
 
 
+@router.get("/stats/session-types")
+async def get_session_type_stats(user: dict = Depends(get_current_user)):
+    """Get total study minutes broken down by session type (chat, document, quiz)."""
+    db = get_supabase_admin()
+    sessions = (
+        db.table("study_sessions")
+        .select("session_type, duration_minutes")
+        .eq("user_id", user["id"])
+        .not_.is_("ended_at", "null")
+        .execute()
+    )
+    type_map: dict = {}
+    for s in sessions.data or []:
+        t = s.get("session_type") or "document"
+        type_map[t] = type_map.get(t, 0) + (s.get("duration_minutes") or 0)
+
+    label_map = {"chat": "Study Coach", "document": "Reading", "quiz": "Practice"}
+    return [
+        {"session_type": k, "label": label_map.get(k, k.title()), "total_minutes": v}
+        for k, v in type_map.items()
+        if v > 0
+    ]
+
+
 @router.get("/dashboard")
 async def get_dashboard(user: dict = Depends(get_current_user)):
     """Get all analytics data for the dashboard."""

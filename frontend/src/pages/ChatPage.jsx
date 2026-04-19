@@ -13,6 +13,7 @@ import ChatPreferencesBar from '../components/chat/ChatPreferencesBar';
 import Spinner from '../components/ui/Spinner';
 import useStudySessionTracker from '../utils/useStudySessionTracker';
 import { readChatPreferences, writeChatPreferences } from '../utils/chatPreferences';
+import { apiClient } from '../lib/apiClient';
 
 const COACH_MODE_OPTIONS = [
   { value: 'learn', label: 'Learn Concept' },
@@ -47,7 +48,7 @@ const ChatPage = () => {
   } = useChatStore();
 
   const { semesters, courses, fetchSemesters, fetchCourses } = useCourseStore();
-  const { todayStats, fetchTodayStats } = useStudyStore();
+  const { todayStats, streak, fetchTodayStats, fetchStreak } = useStudyStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [sidebarOpen, setSidebarOpen] = useState(
@@ -63,6 +64,10 @@ const ChatPage = () => {
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const renameInputRef = useRef(null);
+
+  // Paper analysis per selected course
+  const [paperAnalysis, setPaperAnalysis] = useState(null);
+  const [paperAnalysisLoading, setPaperAnalysisLoading] = useState(false);
 
   const normalizedMode = preferences.responseMode === 'assignment' ? 'learn' : preferences.responseMode;
 
@@ -98,6 +103,19 @@ const ChatPage = () => {
     fetchSemesters();
     fetchTodayStats();
   }, [fetchSemesters, fetchTodayStats]);
+
+  useEffect(() => {
+    fetchStreak();
+  }, [fetchStreak]);
+
+  useEffect(() => {
+    if (!selectedCourse) { setPaperAnalysis(null); return; }
+    setPaperAnalysisLoading(true);
+    apiClient.get(`/ai/analyze-papers/${selectedCourse}`)
+      .then((data) => setPaperAnalysis(data))
+      .catch(() => setPaperAnalysis(null))
+      .finally(() => setPaperAnalysisLoading(false));
+  }, [selectedCourse]);
 
   // Pre-select course from URL param ?course=<id>
   useEffect(() => {
@@ -248,6 +266,27 @@ const ChatPage = () => {
     });
   };
 
+  const handleSendWithText = async (content) => {
+    if (!content || !content.trim() || sending) return;
+    if (allCourses.length === 0) {
+      toast.error('Add a course first before starting a Study Coach session.');
+      return;
+    }
+    const currentSession = coachSessions.find((s) => s.id === activeSessionId);
+    if (!currentSession) {
+      const courseId = selectedCourse || allCourses[0]?.id;
+      if (!courseId) return;
+      const result = await createSession(courseId, `COACH::${content.slice(0, 50)}`);
+      if (!result.success) return;
+    }
+    setText('');
+    await sendMessage(content.trim(), null, {
+      ...preferences,
+      responseMode: normalizedMode,
+      retrievalScope: 'whole_course',
+    });
+  };
+
   const handlePreferenceChange = (key, value) => {
     setPreferences((current) => ({
       ...current,
@@ -264,6 +303,19 @@ const ChatPage = () => {
 
   const activeSession = coachSessions.find((s) => s.id === activeSessionId);
   const activeCourseInfo = allCourses.find((c) => c.id === activeSession?.course_id);
+
+  const highProbTopics = (paperAnalysis?.repeat_topics || [])
+    .filter((t) => t.frequency >= 2)
+    .slice(0, 4);
+
+  const formatTime = (mins) => {
+    if (!mins) return '0m';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  };
 
   useStudySessionTracker({
     enabled: Boolean(activeSessionId),
@@ -470,7 +522,7 @@ const ChatPage = () => {
                   <button
                     key={action.label}
                     type="button"
-                    onClick={() => setText(action.prompt)}
+                    onClick={() => handleSendWithText(action.prompt)}
                     className="px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition"
                   >
                     {action.label}
@@ -495,17 +547,29 @@ const ChatPage = () => {
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6">
           {!activeSession ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-20">
-              <div className="w-16 h-16 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center mb-5">
-                <Sparkles size={28} className="text-violet-500" />
+            <div className="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
+
+              {/* Personalized greeting */}
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center shrink-0">
+                  <Sparkles size={22} className="text-violet-500" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">
+                    {streak?.current_streak > 0
+                      ? `🔥 ${streak.current_streak}-day streak — keep it going!`
+                      : 'Ready to study?'}
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    {todayStats?.total_minutes > 0
+                      ? `${formatTime(todayStats.total_minutes)} studied today · Goal: ${formatTime(todayStats.goal_minutes)}`
+                      : 'No study time logged today yet — start a session below'}
+                  </p>
+                </div>
               </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Mentora Study Coach</h2>
-              <p className="text-sm text-slate-500 max-w-sm mb-8">
-                Plan, revise, and practice across your courses with a single Study Coach workspace.
-              </p>
 
               {allCourses.length === 0 && !loadingSessions ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 max-w-sm text-left">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
                   <p className="text-sm font-semibold text-amber-800 mb-1">No courses found</p>
                   <p className="text-xs text-amber-700">
                     Go to <strong>Courses</strong> and add at least one course first. Study Coach needs a course to work with your materials.
@@ -513,54 +577,110 @@ const ChatPage = () => {
                 </div>
               ) : (
                 <>
-                  <div className="w-full max-w-3xl mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
-                    {[
-                      {
-                        title: 'Build a Plan',
-                        desc: 'Create a revision timeline and focus topics for this week.',
-                        cta: 'Create my 7-day revision plan',
-                      },
-                      {
-                        title: 'Run Practice',
-                        desc: 'Generate quizzes and track where you are weak.',
-                        cta: 'Test me on this course now',
-                      },
-                      {
-                        title: 'Assignment Support',
-                        desc: 'Get outline + key points for assignments using your materials.',
-                        cta: 'Help me draft assignment structure',
-                      },
-                    ].map((item) => (
-                      <button
-                        key={item.title}
-                        onClick={() => setText(item.cta)}
-                        className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-200 hover:bg-emerald-50/50 transition"
-                      >
-                        <p className="text-sm font-semibold text-slate-800 mb-1">{item.title}</p>
-                        <p className="text-xs text-slate-500 leading-relaxed">{item.desc}</p>
-                      </button>
-                    ))}
+                  {/* Paper analysis topics panel */}
+                  {selectedCourse && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+                        {paperAnalysisLoading
+                          ? '🔍 Loading course insights…'
+                          : highProbTopics.length > 0
+                          ? '📊 High-priority topics from your past papers'
+                          : '📚 Course context'}
+                      </p>
+                      {paperAnalysisLoading ? (
+                        <div className="flex gap-2 flex-wrap">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="h-7 w-24 rounded-full bg-slate-200 animate-pulse" />
+                          ))}
+                        </div>
+                      ) : highProbTopics.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {highProbTopics.map((t) => (
+                            <button
+                              key={t.topic}
+                              onClick={() => handleSendWithText(`Teach me about "${t.topic}" for the exam — it appears ${t.frequency} times in past papers`)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition"
+                              title="Click to start a focused session on this topic"
+                            >
+                              🔴 {t.topic}
+                              {t.frequency > 1 && <span className="text-rose-400 font-normal">×{t.frequency}</span>}
+                            </button>
+                          ))}
+                          {(paperAnalysis?.repeat_topics || [])
+                            .filter((t) => t.frequency === 1)
+                            .slice(0, 3)
+                            .map((t) => (
+                              <button
+                                key={t.topic}
+                                onClick={() => handleSendWithText(`Give me an overview of "${t.topic}" for exam preparation`)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition"
+                              >
+                                🟡 {t.topic}
+                              </button>
+                            ))}
+                          <p className="w-full text-[10px] text-slate-400 mt-1">
+                            Click any topic to start a focused session immediately.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 leading-relaxed">
+                          Upload past papers in <strong>Question Lab</strong> and run AI analysis to unlock high-priority exam topics here.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* What do you want to do — one-tap mode cards */}
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">What do you want to do?</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { emoji: '🧠', title: 'Learn', desc: 'Understand a concept', prompt: 'Teach me the most important concept from my course materials in a clear, structured way', mode: 'learn' },
+                        { emoji: '🎯', title: 'Practice', desc: 'Self-test with questions', prompt: 'Generate 5 practice questions from my course materials and quiz me step by step', mode: 'practice' },
+                        { emoji: '📋', title: 'Summarize', desc: 'Key points only', prompt: 'Create a concise revision summary with bullet points of the most important topics in this course', mode: 'summary' },
+                        { emoji: '🗓️', title: 'Study Plan', desc: 'Build a schedule', prompt: 'Create a focused 7-day study plan for my upcoming exam based on my course materials and most important topics', mode: 'exam' },
+                      ].map((item) => (
+                        <button
+                          key={item.title}
+                          onClick={() => {
+                            handlePreferenceChange('responseMode', item.mode);
+                            handleSendWithText(item.prompt);
+                          }}
+                          disabled={sending}
+                          className="rounded-xl border border-slate-200 bg-white p-3 hover:border-emerald-300 hover:bg-emerald-50/60 transition text-left group disabled:opacity-50"
+                        >
+                          <span className="text-xl block mb-1.5">{item.emoji}</span>
+                          <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-800">{item.title}</p>
+                          <p className="text-[10px] text-slate-400 leading-tight mt-0.5 hidden sm:block">{item.desc}</p>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full">
-                    {starterPrompts.map(({ q, icon }) => (
-                      <button
-                        key={q}
-                        onClick={() => setText(q)}
-                        className="text-left text-sm px-4 py-3 rounded-xl border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-start gap-2.5"
-                      >
-                        <span className="text-base">{icon}</span>
-                        <span>{q}</span>
-                      </button>
-                    ))}
+                  {/* Starter prompts — also auto-send */}
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Or ask directly</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {starterPrompts.map(({ q, icon }) => (
+                        <button
+                          key={q}
+                          onClick={() => handleSendWithText(q)}
+                          disabled={sending}
+                          className="text-left text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-start gap-2 disabled:opacity-50"
+                        >
+                          <span className="text-sm shrink-0">{icon}</span>
+                          <span>{q}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  <p className="text-xs text-slate-400 mt-6 flex items-center gap-1">
-                    <Target size={11} />
-                    {selectedCourse
-                      ? `Studying: ${allCourses.find((c) => c.id === selectedCourse)?.course_code || 'Selected course'}`
-                      : 'Select a course in the sidebar to focus your session'}
-                  </p>
+                  {!selectedCourse && (
+                    <p className="text-xs text-slate-400 flex items-center gap-1.5">
+                      <Target size={11} />
+                      Select a course in the sidebar for material-grounded answers with citations.
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -583,7 +703,7 @@ const ChatPage = () => {
                   key={msg.id}
                   message={msg}
                   onFollowUpClick={(prompt) => {
-                    setText(prompt);
+                    handleSendWithText(prompt);
                   }}
                 />
               ))}

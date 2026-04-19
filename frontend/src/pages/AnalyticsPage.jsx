@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { Flame, Target, Clock, TrendingUp, Award, BookOpen } from 'lucide-react';
+import { Flame, Target, Clock, TrendingUp, Award, BookOpen, MessageSquare, FileText, FlaskConical, BrainCircuit } from 'lucide-react';
 import useStudyStore from '../stores/studyStore';
 import Spinner from '../components/ui/Spinner';
 import { AlertTriangle } from 'lucide-react';
@@ -11,20 +11,36 @@ import { AlertTriangle } from 'lucide-react';
 const PIE_COLORS = ['#059669', '#2563EB', '#7C3AED', '#DC2626', '#D97706', '#0891B2', '#E11D48', '#4F46E5'];
 
 const AnalyticsPage = () => {
-  const { dashboardData, weeklyData, courseStats, streak, todayStats, loading, error, fetchDashboard } =
-    useStudyStore();
+  const {
+    dashboardData, weeklyData, courseStats, streak, todayStats, loading, error, fetchDashboard,
+    sessionTypeStats, weakTopicStats, fetchSessionTypeStats, fetchWeakTopicStats,
+  } = useStudyStore();
 
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
 
   useEffect(() => {
+    fetchSessionTypeStats();
+  }, [fetchSessionTypeStats]);
+
+  useEffect(() => {
+    fetchWeakTopicStats();
+  }, [fetchWeakTopicStats]);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       fetchDashboard();
+      fetchSessionTypeStats();
+      fetchWeakTopicStats();
     }, 60 * 1000);
 
     const onVisible = () => {
-      if (!document.hidden) fetchDashboard();
+      if (!document.hidden) {
+        fetchDashboard();
+        fetchSessionTypeStats();
+        fetchWeakTopicStats();
+      }
     };
 
     document.addEventListener('visibilitychange', onVisible);
@@ -32,7 +48,7 @@ const AnalyticsPage = () => {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [fetchDashboard]);
+  }, [fetchDashboard, fetchSessionTypeStats, fetchWeakTopicStats]);
 
   if (loading && !dashboardData && weeklyData.length === 0) {
     return (
@@ -297,10 +313,110 @@ const AnalyticsPage = () => {
         </div>
       </div>
 
+      {/* Session Type Breakdown */}
+      {sessionTypeStats.length > 0 && (() => {
+        const totalMins = sessionTypeStats.reduce((s, x) => s + x.total_minutes, 0) || 1;
+        const typeConfig = {
+          'Study Coach': { icon: MessageSquare, color: '#7c3aed', bg: 'bg-violet-50', text: 'text-violet-700' },
+          'Reading':     { icon: FileText,       color: '#2563eb', bg: 'bg-blue-50',   text: 'text-blue-700'   },
+          'Practice':    { icon: FlaskConical,   color: '#059669', bg: 'bg-emerald-50',text: 'text-emerald-700'},
+        };
+        return (
+          <div className="card p-4 sm:p-6 mb-6 sm:mb-8">
+            <h3 className="text-sm font-bold text-slate-800 mb-1">How You Study</h3>
+            <p className="text-xs text-slate-400 mb-5">Breakdown of your time by activity type</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+              {sessionTypeStats.map((s) => {
+                const cfg = typeConfig[s.label] || { icon: Clock, color: '#64748b', bg: 'bg-slate-50', text: 'text-slate-700' };
+                const Icon = cfg.icon;
+                const pct = Math.round((s.total_minutes / totalMins) * 100);
+                return (
+                  <div key={s.session_type} className={`rounded-xl p-4 ${cfg.bg} flex items-center gap-3`}>
+                    <div className="w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center shrink-0">
+                      <Icon size={18} style={{ color: cfg.color }} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold ${cfg.text}`}>{s.label}</p>
+                      <p className="text-lg font-bold text-slate-900">{pct}%</p>
+                      <p className="text-[10px] text-slate-500">{formatTime(s.total_minutes)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="h-3 rounded-full overflow-hidden flex gap-0.5">
+              {sessionTypeStats.map((s) => {
+                const cfg = typeConfig[s.label] || {};
+                const pct = (s.total_minutes / totalMins) * 100;
+                return (
+                  <div
+                    key={s.session_type}
+                    className="h-full rounded-full transition-all"
+                    style={{ width: `${pct}%`, background: cfg.color || '#64748b' }}
+                    title={`${s.label}: ${formatTime(s.total_minutes)}`}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Weak Topics Panel */}
+      <div className="card p-4 sm:p-6 mb-6 sm:mb-8">
+        <h3 className="text-sm font-bold text-slate-800 mb-1">Weak Topics</h3>
+        <p className="text-xs text-slate-400 mb-4">Topics where your current question accuracy is low</p>
+
+        {weakTopicStats.length === 0 ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center">
+            <BrainCircuit size={20} className="mx-auto mb-2 text-slate-300" />
+            <p className="text-sm text-slate-500">No attempt data yet</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Practice questions and mark Got it or Missed it to unlock weak-topic insights.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {weakTopicStats.slice(0, 6).map((topic) => {
+              const acc = Number(topic.accuracy || 0);
+              const level = acc < 40 ? 'high' : acc < 70 ? 'medium' : 'low';
+              const levelText = level === 'high' ? 'Needs urgent revision' : level === 'medium' ? 'Needs reinforcement' : 'Stable';
+              const levelColor = level === 'high' ? 'text-rose-600' : level === 'medium' ? 'text-amber-600' : 'text-emerald-600';
+              const barColor = level === 'high' ? '#e11d48' : level === 'medium' ? '#d97706' : '#059669';
+
+              return (
+                <div key={topic.topic} className="rounded-xl border border-slate-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{topic.topic}</p>
+                      <p className={`text-[11px] ${levelColor}`}>{levelText}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-slate-900">{acc}%</p>
+                      <p className="text-[10px] text-slate-400">{topic.correct}/{topic.total} correct</p>
+                    </div>
+                  </div>
+
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.max(2, acc)}%`, background: barColor }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+
+            <p className="text-[11px] text-slate-500 pt-1">
+              Focus first on topics below 40% accuracy, then revisit 40-70% topics.
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Goal Streak Calendar */}
       <div className="card p-4 sm:p-6">
         <h3 className="text-sm font-bold text-slate-800 mb-1">Daily Goals</h3>
-        <p className="text-xs text-slate-400 mb-4">Whether you met your daily study goal each day this week</p>
         <div className="grid grid-cols-7 gap-1 sm:gap-3">
           {weeklyData.map((day) => (
             <div

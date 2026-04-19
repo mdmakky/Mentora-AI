@@ -137,10 +137,12 @@ def _group_practice_rows(rows: List[dict]) -> List[dict]:
 
         if key not in grouped:
             grouped[key] = {
+                "id": row.get("id"),
                 "set_number": set_number,
                 "probability": row.get("probability") or "medium",
                 "topic": row.get("topic") or "General",
                 "generation_id": row.get("generation_run_id"),
+                "course_id": row.get("course_id"),
                 "parts": [],
             }
 
@@ -163,6 +165,8 @@ def _group_practice_rows(rows: List[dict]) -> List[dict]:
 
         grouped[key]["parts"].append(
             {
+                "question_id": row.get("id"),
+                "course_id": row.get("course_id"),
                 "label": label,
                 "question": question_text,
                 "answer": row.get("answer_text") or "",
@@ -437,6 +441,87 @@ async def delete_question(question_id: str, user: dict = Depends(get_current_use
     db = get_supabase_admin()
     db.table("question_banks").delete().eq("id", question_id).eq("user_id", user["id"]).execute()
     return {"message": "Question deleted"}
+
+
+@router.post("/questions/{question_id}/attempt")
+async def record_attempt(
+    question_id: str,
+    is_correct: bool = Body(..., embed=True),
+    course_id: Optional[str] = Body(None, embed=True),
+    user: dict = Depends(get_current_user),
+):
+    """Record a question attempt (correct or incorrect)."""
+    db = get_supabase_admin()
+    try:
+        db.table("question_attempts").insert({
+            "user_id": user["id"],
+            "question_bank_id": question_id,
+            "course_id": course_id,
+            "is_correct": is_correct,
+            "attempted_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception as e:
+        msg = str(e)
+        if "question_attempts" in msg and ("does not exist" in msg or "PGRST204" in msg or "42P01" in msg):
+            raise HTTPException(
+                status_code=409,
+                detail="Database migration required: run database/question_attempts_migration.sql in Supabase SQL editor.",
+            )
+        raise HTTPException(status_code=500, detail=f"Failed to record attempt: {msg}")
+    return {"recorded": True}
+
+
+@router.get("/questions/attempts/summary")
+async def get_attempt_summary(
+    course_id: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    """Return per-topic attempt accuracy summary."""
+    db = get_supabase_admin()
+    query = (
+        db.table("question_attempts")
+        .select("is_correct, question_bank_id")
+        .eq("user_id", user["id"])
+    )
+    if course_id:
+        query = query.eq("course_id", course_id)
+    try:
+        attempts = query.execute().data or []
+    except Exception as e:
+        msg = str(e)
+        if "question_attempts" in msg and ("does not exist" in msg or "PGRST204" in msg or "42P01" in msg):
+            return []  # Migration not yet applied — return empty rather than 500
+        raise HTTPException(status_code=500, detail=f"Failed to load attempts: {msg}")
+
+    if not attempts:
+        return []
+
+    qb_ids = list({a["question_bank_id"] for a in attempts if a.get("question_bank_id")})
+    qb_rows = (
+        db.table("question_banks")
+        .select("id, topic_tags")
+        .in_("id", qb_ids)
+        .execute()
+        .data or []
+    )
+    tag_map = {r["id"]: (r.get("topic_tags") or []) for r in qb_rows}
+
+    topic_stats: dict = {}
+    for a in attempts:
+        tags = tag_map.get(a["question_bank_id"], ["General"])
+        for tag in (tags or ["General"]):
+            if tag not in topic_stats:
+                topic_stats[tag] = {"topic": tag, "total": 0, "correct": 0}
+            topic_stats[tag]["total"] += 1
+            if a["is_correct"]:
+                topic_stats[tag]["correct"] += 1
+
+    result = []
+    for stat in topic_stats.values():
+        stat["accuracy"] = round(stat["correct"] / stat["total"] * 100) if stat["total"] else 0
+        result.append(stat)
+
+    return sorted(result, key=lambda x: x["accuracy"])
 
 
 # ─────────────────────────────────────────────────────────────────────────────

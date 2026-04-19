@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, BookOpen, Flame, TrendingUp, Minus, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, BookOpen, Flame, TrendingUp, Minus, CheckCircle2, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { apiClient } from '../../lib/apiClient';
+import toast from 'react-hot-toast';
 
 /**
  * QuestionCard
@@ -100,6 +102,8 @@ const BroadPart = ({ part, partIndex, showAnswer }) => (
 
 const QuestionCard = ({ questionSet, index }) => {
   const [showAnswers, setShowAnswers] = useState(false);
+  const [attempt, setAttempt] = useState(null); // 'correct' | 'wrong' | null
+  const [submittingAttempt, setSubmittingAttempt] = useState(false);
 
   const prob = PROB_CONFIG[questionSet.probability] || PROB_CONFIG.medium;
   const ProbIcon = prob.icon;
@@ -107,6 +111,8 @@ const QuestionCard = ({ questionSet, index }) => {
 
   const totalMarks = parts.reduce((s, p) => s + (p.marks || 0), 0);
   const hasMcq = parts.some(isMcqPart);
+  const resolvedQuestionId = questionSet.id || parts.find((p) => p.question_id)?.question_id || null;
+  const resolvedCourseId = questionSet.course_id || parts.find((p) => p.course_id)?.course_id || null;
 
   return (
     <div
@@ -152,6 +158,75 @@ const QuestionCard = ({ questionSet, index }) => {
           {showAnswers ? 'Hide Answers' : 'Show Answers'}
           {showAnswers ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
+
+        {/* Attempt tracking */}
+        <div className="flex items-center gap-2 ml-auto">
+          {attempt ? (
+            <span
+              className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                attempt === 'correct'
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-rose-100 text-rose-700'
+              }`}
+            >
+              {attempt === 'correct' ? '✓ Got it' : '✗ Missed it'}
+            </span>
+          ) : (
+            <>
+              <span className="text-[10px] text-slate-400 hidden sm:inline">
+                {showAnswers ? 'How did you do?' : 'Reveal answers, then evaluate'}
+              </span>
+              <button
+                disabled={submittingAttempt || !showAnswers || !resolvedQuestionId}
+                onClick={async () => {
+                  if (submittingAttempt || !resolvedQuestionId || !showAnswers) return;
+                  setSubmittingAttempt(true);
+                  try {
+                    await apiClient.post(`/ai/questions/${resolvedQuestionId}/attempt`, {
+                      is_correct: true,
+                      course_id: resolvedCourseId,
+                    });
+                    setAttempt('correct');
+                    toast.success('Marked as Got it');
+                  } catch (err) {
+                    const msg = err?.message || '';
+                    toast.error(msg.includes('migration required') ? 'DB setup needed — ask your admin to run the migration.' : (msg || 'Could not save evaluation'));
+                  } finally {
+                    setSubmittingAttempt(false);
+                  }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] font-semibold hover:bg-emerald-100 transition disabled:opacity-50"
+                title={!resolvedQuestionId ? 'Question ID not available for this set' : !showAnswers ? 'Show answers first' : 'Mark as correct'}
+              >
+                <ThumbsUp size={11} /> Got it
+              </button>
+              <button
+                disabled={submittingAttempt || !showAnswers || !resolvedQuestionId}
+                onClick={async () => {
+                  if (submittingAttempt || !resolvedQuestionId || !showAnswers) return;
+                  setSubmittingAttempt(true);
+                  try {
+                    await apiClient.post(`/ai/questions/${resolvedQuestionId}/attempt`, {
+                      is_correct: false,
+                      course_id: resolvedCourseId,
+                    });
+                    setAttempt('wrong');
+                    toast.success('Marked as Missed it');
+                  } catch (err) {
+                    const msg = err?.message || '';
+                    toast.error(msg.includes('migration required') ? 'DB setup needed — ask your admin to run the migration.' : (msg || 'Could not save evaluation'));
+                  } finally {
+                    setSubmittingAttempt(false);
+                  }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full border border-rose-200 bg-rose-50 text-rose-700 text-[11px] font-semibold hover:bg-rose-100 transition disabled:opacity-50"
+                title={!resolvedQuestionId ? 'Question ID not available for this set' : !showAnswers ? 'Show answers first' : 'Mark as missed'}
+              >
+                <ThumbsDown size={11} /> Missed it
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

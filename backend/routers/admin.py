@@ -58,7 +58,10 @@ async def list_users(
     query = db.table("users").select("*", count="exact")
 
     if search:
-        query = query.or_(f"email.ilike.%{search}%,full_name.ilike.%{search}%")
+        # Sanitize: remove characters that could manipulate PostgREST filter syntax
+        safe_search = search.replace('(', '').replace(')', '').replace(',', '').replace('"', '').strip()[:100]
+        if safe_search:
+            query = query.or_(f"email.ilike.%{safe_search}%,full_name.ilike.%{safe_search}%")
 
     if filter == "suspended":
         query = query.eq("is_upload_suspended", True)

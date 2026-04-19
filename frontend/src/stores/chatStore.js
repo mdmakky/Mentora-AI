@@ -3,13 +3,16 @@ import toast from 'react-hot-toast';
 import { apiClient } from '../lib/apiClient';
 
 const preserveDocumentPrefix = (existingTitle, nextTitle) => {
-  if (typeof existingTitle !== 'string' || !existingTitle.startsWith('DOC::')) {
-    return nextTitle;
+  if (typeof existingTitle !== 'string') return nextTitle;
+  if (existingTitle.startsWith('DOC::')) {
+    const parts = existingTitle.split('::', 3);
+    if (parts.length < 3) return nextTitle;
+    return `DOC::${parts[1]}::${nextTitle}`;
   }
-
-  const parts = existingTitle.split('::', 3);
-  if (parts.length < 3) return nextTitle;
-  return `DOC::${parts[1]}::${nextTitle}`;
+  if (existingTitle.startsWith('COACH::')) {
+    return `COACH::${nextTitle}`;
+  }
+  return nextTitle;
 };
 
 const useChatStore = create((set, get) => ({
