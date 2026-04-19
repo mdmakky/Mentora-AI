@@ -42,3 +42,33 @@ def delete_document(path: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def upload_thumbnail(jpeg_bytes: bytes, doc_id: str) -> str:
+    """
+    Store a pre-rendered JPEG thumbnail in Supabase at a predictable path.
+    Returns the storage path, or empty string on failure.
+    The thumbnail endpoint downloads this tiny file (~10-20 KB) instead of
+    the full PDF, so the backend never has to download the whole document
+    again just to show a card preview.
+    """
+    db = get_supabase_admin()
+    path = f"thumbnails/{doc_id}.jpg"
+    try:
+        db.storage.from_("mentora-docs").upload(
+            path=path,
+            file=jpeg_bytes,
+            file_options={"content-type": "image/jpeg"},
+        )
+        return path
+    except Exception:
+        return ""
+
+
+def delete_thumbnail(doc_id: str) -> None:
+    """Remove thumbnail when the parent document is deleted."""
+    try:
+        db = get_supabase_admin()
+        db.storage.from_("mentora-docs").remove([f"thumbnails/{doc_id}.jpg"])
+    except Exception:
+        pass

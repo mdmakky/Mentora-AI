@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 from schemas.document import DocumentUpdate, DocumentResponse
 from core.database import get_supabase_admin
 from core.dependencies import get_current_user, check_upload_allowed
-from services.supabase_storage_service import upload_document as upload_file, delete_document as delete_file
+from services.supabase_storage_service import (
+    upload_document as upload_file,
+    delete_document as delete_file,
+    upload_thumbnail,
+    delete_thumbnail,
+)
 from services.pdf_service import (
     extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx,
     calculate_file_hash, get_pdf_page_count,
@@ -18,6 +23,7 @@ from services.conversion_service import convert_to_pdf
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 import uuid
+import io
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -149,6 +155,21 @@ async def upload_document(
 
     # Upload to Supabase Storage
     cloud_result = upload_file(file_bytes, user["id"], course_id, doc_id, file.filename)
+
+    # Generate a thumbnail for PDFs right now — the bytes are already in memory.
+    # This tiny JPEG (~10–20 KB) is stored in Supabase so thumbnail requests
+    # never need to download the full PDF again.
+    if file_type == "pdf":
+        try:
+            import fitz
+            _pdf = fitz.open(stream=file_bytes, filetype="pdf")
+            _pix = _pdf[0].get_pixmap(matrix=fitz.Matrix(1.2, 1.2), alpha=False)
+            _pdf.close()
+            _buf = io.BytesIO()
+            _buf.write(_pix.tobytes("jpeg", jpg_quality=75))
+            upload_thumbnail(_buf.getvalue(), doc_id)  # fire-and-forget; failure is non-fatal
+        except Exception as _thumb_err:
+            logger.warning("Thumbnail generation failed for %s: %s", doc_id, _thumb_err)
 
     # Run copyright check (skip entirely for question_paper)
     pages = []
@@ -474,6 +495,53 @@ async def proxy_document(doc_id: str, user: dict = Depends(get_current_user)):
     )
 
 
+@router.get("/{doc_id}/thumbnail")
+async def get_document_thumbnail(doc_id: str, user: dict = Depends(get_current_user)):
+    """
+    Serve the pre-rendered JPEG thumbnail of page 1.
+    The JPEG (~10-20 KB) was generated at upload time and stored in Supabase.
+    This endpoint never downloads the full PDF.
+    """
+    db = get_supabase_admin()
+    result = (
+        db.table("documents")
+        .select("file_type, processing_status")
+        .eq("id", doc_id)
+        .eq("user_id", user["id"])
+        .eq("is_deleted", False)
+        .single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    row = result.data
+    if row.get("file_type") != "pdf":
+        raise HTTPException(status_code=415, detail="Thumbnail only available for PDF documents")
+    if row.get("processing_status") not in ("ready", "pending", "processing"):
+        raise HTTPException(status_code=409, detail="Document not available")
+
+    thumb_path = f"thumbnails/{doc_id}.jpg"
+    try:
+        jpeg_bytes = db.storage.from_("mentora-docs").download(thumb_path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Thumbnail not yet available")
+
+    if not jpeg_bytes:
+        raise HTTPException(status_code=404, detail="Thumbnail not yet available")
+
+    from fastapi.responses import Response
+    return Response(
+        content=jpeg_bytes,
+        media_type="image/jpeg",
+        headers={
+            # Tiny file — cache aggressively in browser
+            "Cache-Control": "private, max-age=604800, immutable",
+            "Content-Length": str(len(jpeg_bytes)),
+        },
+    )
+
+
 @router.put("/{doc_id}", response_model=DocumentResponse)
 async def update_document(doc_id: str, data: DocumentUpdate, user: dict = Depends(get_current_user)):
     """Rename or move a document."""
@@ -501,8 +569,9 @@ async def delete_document(doc_id: str, user: dict = Depends(get_current_user)):
     # Delete chunks
     db.table("document_chunks").delete().eq("document_id", doc_id).execute()
 
-    # Delete from Supabase Storage
+    # Delete from Supabase Storage (document + thumbnail)
     delete_file(doc.data["cloudinary_public_id"])
+    delete_thumbnail(doc_id)
 
     return {"message": "Document deleted"}
 

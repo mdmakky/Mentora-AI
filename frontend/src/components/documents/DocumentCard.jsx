@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Trash2, CheckCircle, AlertTriangle, Loader2, RefreshCw, ShieldQuestion } from 'lucide-react';
 import useDocumentStore from '../../stores/documentStore';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import PdfThumbnail from './PdfThumbnail';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
@@ -148,9 +149,16 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
         }`}
       >
         {/* Preview area */}
-        <div className="h-32 bg-linear-to-br from-slate-50 to-slate-100 flex items-center justify-center relative">
-          <span className="text-4xl">{typeIcons[doc.file_type] || '📄'}</span>
-          <span className={`badge ${status.cls} absolute top-2 right-2 text-[10px]`}>
+        <div className="h-36 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center relative overflow-hidden">
+          {doc.file_type === 'pdf' && doc.processing_status === 'ready' ? (
+            <PdfThumbnail
+              docId={doc.id}
+              fallback={<span className="text-4xl">{typeIcons[doc.file_type] || '📄'}</span>}
+            />
+          ) : (
+            <span className="text-4xl">{typeIcons[doc.file_type] || '📄'}</span>
+          )}
+          <span className={`badge ${status.cls} absolute top-2 right-2 text-[10px] z-10`}>
             {status.spin ? <Loader2 size={10} className="animate-spin mr-1" /> : <status.icon size={10} className="mr-1" />}
             {status.label}
           </span>
