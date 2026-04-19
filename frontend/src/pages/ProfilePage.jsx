@@ -134,8 +134,13 @@ const PanelHeader = ({ title, subtitle }) => (
 
 const ProfilePage = () => {
   const { user, updateProfile, getProfile } = useAuthStore();
-  const isGoogleUser = !user?.password_hash;
+  const isGoogleUser = user ? !user.has_password : false;
   const initials = user?.full_name?.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'U';
+  const panelOptions = [
+    { key: 'profile', icon: User, label: 'Profile Settings' },
+    { key: 'security', icon: isGoogleUser ? KeyRound : Lock, label: isGoogleUser ? 'Add Password' : 'Password' },
+    { key: 'account', icon: Settings, label: 'Account Details' },
+  ];
 
   const [activePanel, setActivePanel] = useState('profile');
   const [form, setForm] = useState({
@@ -281,7 +286,7 @@ const ProfilePage = () => {
 
       <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
         <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] lg:grid-cols-[240px_1fr]">
-          <aside className="border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5 md:border-b-0 md:border-r">
+          <aside className="hidden border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5 md:block md:border-b-0 md:border-r">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Settings</p>
               <h2 className="mt-2 text-lg font-bold text-slate-900">Your Workspace</h2>
@@ -289,28 +294,39 @@ const ProfilePage = () => {
             </div>
 
             <div className="space-y-2">
-              <SidebarButton
-                active={activePanel === 'profile'}
-                icon={User}
-                label="Profile Settings"
-                onClick={() => setActivePanel('profile')}
-              />
-              <SidebarButton
-                active={activePanel === 'security'}
-                icon={isGoogleUser ? KeyRound : Lock}
-                label={isGoogleUser ? 'Add Password' : 'Password'}
-                onClick={() => setActivePanel('security')}
-              />
-              <SidebarButton
-                active={activePanel === 'account'}
-                icon={Settings}
-                label="Account Details"
-                onClick={() => setActivePanel('account')}
-              />
+              {panelOptions.map(({ key, icon, label }) => (
+                <SidebarButton
+                  key={key}
+                  active={activePanel === key}
+                  icon={icon}
+                  label={label}
+                  onClick={() => setActivePanel(key)}
+                />
+              ))}
             </div>
           </aside>
 
           <section className="p-4 sm:p-6 lg:p-7">
+            <div className="sticky top-0 z-20 -mx-4 mb-5 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 md:hidden">
+              <div className="flex gap-2 overflow-x-auto">
+                {panelOptions.map(({ key, icon: Icon, label }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActivePanel(key)}
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                      activePanel === key
+                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-500'
+                    }`}
+                  >
+                    <Icon size={12} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {activePanel === 'profile' ? (
               <>
                 <PanelHeader

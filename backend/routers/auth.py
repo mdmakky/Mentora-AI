@@ -80,11 +80,16 @@ def _is_expired(expiry_iso: str) -> bool:
 
 
 async def _fetch_google_userinfo(access_token: str) -> dict:
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=503, detail="Google sign-in is temporarily unavailable. Please try again.")
+    except httpx.RequestError:
+        raise HTTPException(status_code=503, detail="Could not reach Google sign-in service. Please try again.")
 
     if response.status_code != 200:
         raise HTTPException(status_code=401, detail="Invalid Google access token")

@@ -19,7 +19,10 @@ const sanitizeUser = (user) => {
     reset_code_expires_at,
     ...safeUser
   } = user;
-  return safeUser;
+  return {
+    ...safeUser,
+    has_password: Boolean(password_hash),
+  };
 };
 
 const useAuthStore = create((set, get) => ({
