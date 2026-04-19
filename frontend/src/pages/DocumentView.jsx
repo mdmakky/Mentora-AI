@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MessageSquare, PanelRightOpen, PanelRightClose, X } from 'lucide-react';
+import { ArrowLeft, MessageSquare, PanelRightOpen, PanelRightClose, X, AlertTriangle } from 'lucide-react';
 import useDocumentStore from '../stores/documentStore';
 import PDFViewer from '../components/pdf/PDFViewer';
 import ChatPanel from '../components/chat/ChatPanel';
@@ -158,6 +158,16 @@ const DocumentView = () => {
             </button>
           )}
         </div>
+
+        {currentDoc.is_ocr_processed && (
+          <div className="flex items-start gap-2.5 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800">
+            <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-500" />
+            <p className="text-xs leading-snug">
+              <span className="font-semibold">OCR-processed document</span>
+              {' — some pages were image-only and read via OCR. AI search and chat may be less accurate than a text-selectable PDF.'}
+            </p>
+          </div>
+        )}
 
         <PDFViewer
           url={pdfUrl}

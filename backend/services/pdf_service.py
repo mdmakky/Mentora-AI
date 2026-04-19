@@ -1,11 +1,22 @@
 import fitz  # PyMuPDF
 import hashlib
 import io
+import logging
 from typing import List, Tuple, Optional
+
+logger = logging.getLogger(__name__)
+
+# Minimum characters on a page to consider it "has real text".
+# Pages with fewer (e.g. just a page number or header) are treated as image pages.
+_MIN_TEXT_CHARS = 20
+
+# Set to True the first time Tesseract is found to be unavailable,
+# so we stop attempting OCR for the rest of the process lifetime.
+_tesseract_unavailable: bool = False
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> List[dict]:
-    """Extract text from PDF page by page."""
+    """Extract text from PDF page by page (no OCR)."""
     pages = []
     doc = fitz.open(stream=file_bytes, filetype="pdf")
 
@@ -20,6 +31,99 @@ def extract_text_from_pdf(file_bytes: bytes) -> List[dict]:
 
     doc.close()
     return pages
+
+
+def extract_text_from_pdf_with_ocr(file_bytes: bytes) -> Tuple[List[dict], bool]:
+    """
+    Extract text from a PDF with per-page Tesseract OCR fallback.
+
+    For every page:
+      - First attempt: standard text layer extraction (PyMuPDF).
+      - If the page has fewer than _MIN_TEXT_CHARS characters (image-only or
+        near-blank), it is re-processed via PyMuPDF's built-in Tesseract OCR
+        bridge (page.get_textpage_ocr).
+
+    Returns:
+        (pages, ocr_applied)
+        - pages: same List[{"page_number": int, "content": str}] format as
+          extract_text_from_pdf, ready for chunk_document().
+        - ocr_applied: True if OCR was used on at least one page.
+
+    Requires: tesseract-ocr installed on the system (`apt install tesseract-ocr`).
+    If Tesseract is not present, image pages are silently skipped and
+    ocr_applied is always False (no error raised).
+    """
+    global _tesseract_unavailable
+
+    pages: List[dict] = []
+    ocr_applied = False
+
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+    for page_num in range(len(doc)):
+        page = doc.load_page(page_num)
+        text = page.get_text("text").strip()
+
+        if len(text) >= _MIN_TEXT_CHARS:
+            # Normal text layer — use as-is
+            pages.append({
+                "page_number": page_num + 1,
+                "content": text,
+            })
+            continue
+
+        # Image-only / sparse page — attempt OCR
+        if _tesseract_unavailable:
+            # Tesseract confirmed missing earlier; skip silently
+            if text:
+                pages.append({"page_number": page_num + 1, "content": text})
+            continue
+
+        try:
+            ocr_tp = page.get_textpage_ocr(
+                flags=3,       # preserve whitespace + ligatures
+                language="eng",
+                dpi=150,       # 150 DPI matches quality used elsewhere in the pipeline
+                full=True,     # OCR the full page (not just detected image regions)
+            )
+            ocr_text = page.get_text(textpage=ocr_tp).strip()
+
+            if ocr_text and len(ocr_text) >= _MIN_TEXT_CHARS:
+                pages.append({
+                    "page_number": page_num + 1,
+                    "content": ocr_text,
+                })
+                ocr_applied = True
+                logger.debug(
+                    "[pdf_service] OCR applied to page %d (%d chars extracted)",
+                    page_num + 1, len(ocr_text),
+                )
+            elif text:
+                # OCR yielded nothing useful, at least keep the sparse original text
+                pages.append({"page_number": page_num + 1, "content": text})
+
+        except RuntimeError as e:
+            err_lower = str(e).lower()
+            if "tesseract" in err_lower or "tessdata" in err_lower or "no ocr support" in err_lower:
+                _tesseract_unavailable = True
+                logger.warning(
+                    "[pdf_service] Tesseract OCR is unavailable (%s) — "
+                    "image-only pages will be skipped. "
+                    "Install with: sudo apt install tesseract-ocr",
+                    e,
+                )
+            else:
+                logger.warning("[pdf_service] OCR failed on page %d: %s", page_num + 1, e)
+            if text:
+                pages.append({"page_number": page_num + 1, "content": text})
+
+        except Exception as e:
+            logger.warning("[pdf_service] OCR error on page %d: %s", page_num + 1, e)
+            if text:
+                pages.append({"page_number": page_num + 1, "content": text})
+
+    doc.close()
+    return pages, ocr_applied
 
 
 def get_pdf_page_count(file_bytes: bytes) -> int:

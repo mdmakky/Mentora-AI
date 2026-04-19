@@ -1,3 +1,15 @@
+import os as _os
+# Must be set before fitz (PyMuPDF) is imported anywhere in this process.
+if not _os.environ.get("TESSDATA_PREFIX"):
+    for _p in (
+        "/usr/share/tesseract-ocr/5/tessdata",
+        "/usr/share/tesseract-ocr/4/tessdata",
+        "/usr/share/tessdata",
+    ):
+        if _os.path.isdir(_p):
+            _os.environ["TESSDATA_PREFIX"] = _p
+            break
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

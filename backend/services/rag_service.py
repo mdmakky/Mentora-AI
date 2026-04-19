@@ -448,15 +448,23 @@ async def process_document_pipeline(
         # Update status to processing
         db.table("documents").update({"processing_status": "processing"}).eq("id", doc_id).execute()
 
-        # Reuse pre-extracted pages when available (avoids double extraction on upload)
-        if preextracted_pages is not None:
-            pages = preextracted_pages
-        else:
-            from services.pdf_service import extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx
+        ocr_applied = False
 
-            if file_type == "pdf":
-                pages = extract_text_from_pdf(file_bytes)
-            elif file_type == "docx":
+        if file_type == "pdf":
+            # Always re-extract PDFs with the OCR-aware function.
+            # preextracted_pages (from upload) skips OCR on image pages, so we
+            # do a fresh pass here to guarantee every page is covered.
+            from services.pdf_service import extract_text_from_pdf_with_ocr
+            pages, ocr_applied = extract_text_from_pdf_with_ocr(file_bytes)
+
+        elif preextracted_pages is not None:
+            # Non-PDF types: reuse pages already extracted at upload time
+            # (avoids double extraction for DOCX/PPTX)
+            pages = preextracted_pages
+
+        else:
+            from services.pdf_service import extract_text_from_docx, extract_text_from_pptx
+            if file_type == "docx":
                 pages = extract_text_from_docx(file_bytes)
             elif file_type == "pptx":
                 pages = extract_text_from_pptx(file_bytes)
@@ -495,12 +503,32 @@ async def process_document_pipeline(
                 )
             return
 
-        # Update document status
-        db.table("documents").update({
+        # Build final status update
+        status_update: dict = {
             "processing_status": "ready",
             "chunk_count": stored_count,
             "page_count": len(pages),
-        }).eq("id", doc_id).execute()
+        }
+
+        # Persist OCR flag so the UI can show the accuracy warning banner
+        if ocr_applied:
+            status_update["is_ocr_processed"] = True
+            logger.info("[rag_pipeline] OCR was applied for doc=%s; flagging is_ocr_processed=true", doc_id)
+
+        try:
+            db.table("documents").update(status_update).eq("id", doc_id).execute()
+        except Exception as upd_err:
+            # is_ocr_processed column may not exist yet (migration not applied).
+            # Fall back to updating without that field — document still marked ready.
+            if "is_ocr_processed" in str(upd_err):
+                status_update.pop("is_ocr_processed", None)
+                db.table("documents").update(status_update).eq("id", doc_id).execute()
+                logger.warning(
+                    "[rag_pipeline] is_ocr_processed column missing — "
+                    "run database/ocr_migration.sql to enable the UI banner. doc=%s", doc_id
+                )
+            else:
+                raise
 
     except Exception as e:
         logger.error("Document processing error for %s: %s", doc_id, e)
