@@ -58,6 +58,7 @@ class DocumentResponse(BaseModel):
     review_requested_at: Optional[str] = None
     review_decided_at: Optional[str] = None
     chunk_count: int = 0
+    is_ocr_processed: bool = False
     is_deleted: bool = False
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

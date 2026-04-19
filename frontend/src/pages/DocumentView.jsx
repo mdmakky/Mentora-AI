@@ -12,6 +12,7 @@ const DocumentView = () => {
   const navigate = useNavigate();
   const [chatOpen, setChatOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [ocrBannerExpanded, setOcrBannerExpanded] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [targetPage, setTargetPage] = useState(null);
@@ -160,13 +161,35 @@ const DocumentView = () => {
         </div>
 
         {currentDoc.is_ocr_processed && (
-          <div className="flex items-start gap-2.5 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800">
-            <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-500" />
-            <p className="text-xs leading-snug">
-              <span className="font-semibold">OCR-processed document</span>
-              {' — some pages were image-only and read via OCR. AI search and chat may be less accurate than a text-selectable PDF.'}
-            </p>
-          </div>
+          isMobile ? (
+            /* Mobile: collapsible pill */
+            <div className="border-b border-amber-200 bg-amber-50">
+              <button
+                onClick={() => setOcrBannerExpanded(v => !v)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-amber-800"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <AlertTriangle size={13} className="shrink-0 text-amber-500" />
+                  <span className="text-xs font-semibold truncate">OCR-processed document</span>
+                </div>
+                <span className="text-xs text-amber-600 shrink-0">{ocrBannerExpanded ? '▲ less' : '▼ more'}</span>
+              </button>
+              {ocrBannerExpanded && (
+                <p className="px-3 pb-2.5 text-xs text-amber-700 leading-snug">
+                  Some pages were image-only and read via OCR. AI search and chat may be less accurate than a text-selectable PDF.
+                </p>
+              )}
+            </div>
+          ) : (
+            /* Desktop: full persistent banner */
+            <div className="flex items-start gap-2.5 px-4 py-2.5 bg-amber-50 border-b border-amber-200 text-amber-800">
+              <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-500" />
+              <p className="text-xs leading-snug">
+                <span className="font-semibold">OCR-processed document</span>
+                {' — some pages were image-only and read via OCR. AI search and chat may be less accurate than a text-selectable PDF.'}
+              </p>
+            </div>
+          )
         )}
 
         <PDFViewer
