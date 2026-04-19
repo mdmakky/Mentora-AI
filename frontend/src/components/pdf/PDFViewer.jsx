@@ -16,6 +16,10 @@ const PDFViewer = ({ url, targetPage, targetCitation, onVisiblePageChange }) => 
   const [showThumbnails, setShowThumbnails] = useState(false);
   const containerRef = useRef(null);
   const pageRefs = useRef({});
+  // While true, handleScroll ignores events — prevents smooth-scroll
+  // animation from overwriting currentPage with intermediate positions.
+  const isProgrammaticScroll = useRef(false);
+  const programmaticScrollTimer = useRef(null);
 
   const clearCitationHighlight = useCallback(() => {
     const container = containerRef.current;
@@ -75,6 +79,11 @@ const PDFViewer = ({ url, targetPage, targetCitation, onVisiblePageChange }) => 
     onVisiblePageChange?.(page);
     const el = pageRefs.current[page];
     if (el) {
+      isProgrammaticScroll.current = true;
+      clearTimeout(programmaticScrollTimer.current);
+      programmaticScrollTimer.current = setTimeout(() => {
+        isProgrammaticScroll.current = false;
+      }, 800);
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [onVisiblePageChange]);
@@ -119,18 +128,20 @@ const PDFViewer = ({ url, targetPage, targetCitation, onVisiblePageChange }) => 
     return () => window.removeEventListener('resize', updateWidth);
   }, [isMobile]);
 
-  // Track scroll position to update current page
   const handleScroll = useCallback(() => {
+    if (isProgrammaticScroll.current) return;
+
     const container = containerRef.current;
     if (!container) return;
 
-    const containerTop = container.scrollTop + 100;
-    for (let i = numPages; i >= 1; i--) {
+    const containerTop = container.getBoundingClientRect().top;
+    for (let i = 1; i <= numPages; i++) {
       const el = pageRefs.current[i];
-      if (el && el.offsetTop <= containerTop) {
+      if (!el) continue;
+      if (el.getBoundingClientRect().bottom > containerTop + 4) {
         setCurrentPage(i);
         onVisiblePageChange?.(i);
-        break;
+        return;
       }
     }
   }, [numPages, onVisiblePageChange]);

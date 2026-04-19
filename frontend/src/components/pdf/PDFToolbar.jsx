@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize2,
   Columns, Download,
@@ -15,9 +16,19 @@ const PDFToolbar = ({
   onFitPage,
   onToggleThumbnails,
 }) => {
-  const handleInput = (e) => {
-    const val = parseInt(e.target.value);
-    if (!isNaN(val)) onPageChange(val);
+  const [inputValue, setInputValue] = useState(String(currentPage));
+
+  useEffect(() => {
+    setInputValue(String(currentPage));
+  }, [currentPage]);
+
+  const commitPage = () => {
+    const val = parseInt(inputValue, 10);
+    if (!isNaN(val) && val >= 1 && val <= numPages) {
+      onPageChange(val);
+    } else {
+      setInputValue(String(currentPage));
+    }
   };
 
   return (
@@ -40,8 +51,10 @@ const PDFToolbar = ({
             type="number"
             min={1}
             max={numPages}
-            value={currentPage}
-            onChange={handleInput}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onBlur={commitPage}
+            onKeyDown={(e) => e.key === 'Enter' && commitPage()}
             className="pdf-page-input"
           />
           <span className="text-slate-400">/</span>
