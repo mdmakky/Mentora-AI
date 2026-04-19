@@ -172,7 +172,7 @@ const ChatPanel = ({ courseId, documentId, documentName, currentPage, onCitation
     return values;
   };
 
-  const handleSend = async (content) => {
+  const handleSend = async (content, { scopeOverride } = {}) => {
     if (!activeSessionId) {
       // Auto-create session on first message
       const baseTitle = content.slice(0, 50);
@@ -180,12 +180,14 @@ const ChatPanel = ({ courseId, documentId, documentName, currentPage, onCitation
       const result = await createSession(courseId, title);
       if (!result.success) return;
     }
-    const selectedPages = preferences.retrievalScope === 'selected_pages'
+    const effectiveScope = scopeOverride || preferences.retrievalScope;
+    const selectedPages = effectiveScope === 'selected_pages'
       ? parseSelectedPages(selectedPagesInput)
       : [];
 
     await sendMessage(content, documentId ? [documentId] : null, {
       ...preferences,
+      retrievalScope: effectiveScope,
       currentPage,
       selectedPages,
       sectionAnchorPage: currentPage,
@@ -332,7 +334,7 @@ const ChatPanel = ({ courseId, documentId, documentName, currentPage, onCitation
               {starterPrompts.map((q) => (
                 <button
                   key={q}
-                  onClick={() => handleSend(q)}
+                  onClick={() => handleSend(q, { scopeOverride: 'current_page' })}
                   className="w-full text-left text-xs px-3 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition"
                 >
                   {q}

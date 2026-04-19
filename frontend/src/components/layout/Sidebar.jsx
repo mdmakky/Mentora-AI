@@ -105,7 +105,7 @@ const Sidebar = ({ collapsed, mobileOpen, onToggle, onMobileClose }) => {
                 <item.icon size={20} className="sidebar-link-icon text-indigo-400" />
                 {!collapsed && <span className="flex-1">{item.label}</span>}
                 {!collapsed && item.badge > 0 && (
-                  <span className="ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white px-1">
+                  <span className="ml-auto min-w-4.5 h-4.5 flex items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white px-1">
                     {item.badge > 9 ? '9+' : item.badge}
                   </span>
                 )}
@@ -126,7 +126,7 @@ const Sidebar = ({ collapsed, mobileOpen, onToggle, onMobileClose }) => {
             onClick={onMobileClose}
             className="flex items-center gap-3 mb-4 px-1 rounded-xl p-2 hover:bg-white/10 transition cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 overflow-hidden">
+            <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0 overflow-hidden">
               {user.avatar_url
                 ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
                 : user.full_name?.charAt(0)?.toUpperCase() || 'U'
