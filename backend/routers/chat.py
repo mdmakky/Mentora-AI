@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 import logging
+import re
 from typing import List, Optional
 from schemas.chat import ChatSessionCreate, ChatSessionUpdate, ChatSessionResponse, ChatMessageCreate, ChatMessageResponse
 from core.database import get_supabase_admin
@@ -68,6 +69,22 @@ def _sanitize_pages(values: Optional[List[int]]) -> List[int]:
         if isinstance(value, int) and value > 0 and value not in pages:
             pages.append(value)
     return pages[:20]
+
+
+_PAGE_MENTION_RE = re.compile(
+    r'\b(?:page|pg|p\.?)\s*(?:number|num|no\.?)?\s*(\d{1,4})\b',
+    re.IGNORECASE,
+)
+
+
+def _extract_page_mentions(text: str) -> List[int]:
+    """Extract page numbers explicitly mentioned in the query, e.g. 'page 52' or 'page number 52'."""
+    found: List[int] = []
+    for m in _PAGE_MENTION_RE.finditer(text):
+        n = int(m.group(1))
+        if 1 <= n <= 9999 and n not in found:
+            found.append(n)
+    return found
 
 
 def _pick_top_k(response_mode: str, explanation_level: str, document_ids: Optional[List[str]]) -> int:
@@ -261,6 +278,18 @@ async def send_message(
         anchor = data.section_anchor_page if isinstance(data.section_anchor_page, int) else data.current_page
         if isinstance(anchor, int) and anchor > 0:
             section_anchor_page = anchor
+
+    # If the user explicitly mentions page numbers in their message (e.g. "explain page 52"),
+    # extract those and add them to the retrieval filter so the RAG doesn't wander to
+    # unrelated pages that happen to be a better semantic match.
+    text_page_mentions = _extract_page_mentions(data.content)
+    if text_page_mentions:
+        # Union with any scope-derived pages (deduplicated, order preserved)
+        seen = set(page_numbers)
+        for p in text_page_mentions:
+            if p not in seen:
+                page_numbers.append(p)
+                seen.add(p)
 
     # Save user message
     user_msg = db.table("chat_messages").insert({
