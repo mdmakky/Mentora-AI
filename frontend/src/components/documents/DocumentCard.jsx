@@ -158,8 +158,8 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
         }`}
       >
         {/* Preview area */}
-        <div className="h-36 bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center relative overflow-hidden">
-          {doc.file_type === 'pdf' && doc.processing_status === 'ready' ? (
+        <div className="h-36 bg-linear-to-br from-slate-50 to-slate-100 flex items-center justify-center relative overflow-hidden">
+          {(doc.file_type === 'pdf' || doc.file_type === 'jpg' || doc.file_type === 'png') && doc.processing_status === 'ready' ? (
             <PdfThumbnail
               docId={doc.id}
               fallback={<span className="text-4xl">{typeIcons[doc.file_type] || '📄'}</span>}

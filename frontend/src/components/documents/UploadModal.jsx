@@ -111,7 +111,7 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
   const onDropRejected = useCallback((rejected) => {
     if (rejected.length === 0) return;
     const file = rejected[0].file;
-    setError(`Rejected file: ${file.name}. Ensure it's a valid format (PDF, DOCX, PPT, PPTX, JPG, PNG) and under 50MB.`);
+    setError(`Rejected file: ${file.name}. Ensure it's a valid format (PDF, DOCX, PPT, PPTX, JPG, PNG) and under 10MB.`);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -125,7 +125,7 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
       'image/jpeg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],
     },
-    maxSize: 50 * 1024 * 1024,
+    maxSize: 10 * 1024 * 1024,
     multiple: true,
   });
 

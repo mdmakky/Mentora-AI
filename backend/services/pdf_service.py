@@ -197,6 +197,30 @@ def extract_text_from_pptx(file_bytes: bytes) -> List[dict]:
         return [{"page_number": 1, "content": f"Error extracting PPTX: {str(e)}"}]
 
 
+def extract_text_from_image(file_bytes: bytes, file_ext: str) -> Tuple[List[dict], bool]:
+    """
+    Run OCR on a standalone JPEG or PNG image using PyMuPDF + Tesseract.
+
+    The image is wrapped into a one-page in-memory PDF so the existing
+    OCR-aware PDF path (`extract_text_from_pdf_with_ocr`) can be reused
+    without duplicating any logic.
+
+    Returns:
+        (pages, ocr_applied) — same contract as extract_text_from_pdf_with_ocr.
+    """
+    ext = file_ext.lower().lstrip('.')
+    fitz_type = "jpeg" if ext in ("jpg", "jpeg") else "png"
+    try:
+        img_doc = fitz.open(stream=file_bytes, filetype=fitz_type)
+        pdf_bytes = img_doc.convert_to_pdf()
+        img_doc.close()
+    except Exception as e:
+        logger.warning("[pdf_service] Could not open image '%s' for OCR: %s", file_ext, e)
+        return [], False
+
+    return extract_text_from_pdf_with_ocr(pdf_bytes)
+
+
 def calculate_file_hash(file_bytes: bytes) -> str:
     """Calculate SHA-256 hash of file content."""
     return hashlib.sha256(file_bytes).hexdigest()

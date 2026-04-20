@@ -13,7 +13,7 @@ from services.supabase_storage_service import (
     delete_thumbnail,
 )
 from services.pdf_service import (
-    extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx,
+    extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx, extract_text_from_image,
     calculate_file_hash, get_pdf_page_count,
 )
 from services.copyright_service import run_copyright_check
@@ -38,7 +38,7 @@ ALLOWED_TYPES = {
     "image/jpeg": "jpg",
     "image/png": "png",
 }
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 REVIEW_COLUMNS = {
     "flag_reason",
     "review_requested",
@@ -66,8 +66,11 @@ def _extract_pages_for_scan(file_bytes: bytes, file_type: str):
         return extract_text_from_pdf(file_bytes)
     if file_type == "docx":
         return extract_text_from_docx(file_bytes)
-    if file_type == "pptx":
+    if file_type in ("pptx", "ppt"):
         return extract_text_from_pptx(file_bytes)
+    if file_type in ("jpg", "png"):
+        pages, _ = extract_text_from_image(file_bytes, file_type)
+        return pages
     return []
 
 
@@ -96,7 +99,7 @@ async def upload_document(
     # Read file
     file_bytes = await file.read()
     if len(file_bytes) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
+        raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
 
     db = get_supabase_admin()
     doc_id = str(uuid.uuid4())
@@ -171,6 +174,17 @@ async def upload_document(
             upload_thumbnail(_buf.getvalue(), doc_id)  # fire-and-forget; failure is non-fatal
         except Exception as _thumb_err:
             logger.warning("Thumbnail generation failed for %s: %s", doc_id, _thumb_err)
+    elif file_type in ["jpg", "png"]:
+        try:
+            import fitz
+            _img = fitz.open(stream=file_bytes, filetype="jpeg" if file_type == "jpg" else "png")
+            _pix = _img[0].get_pixmap(matrix=fitz.Matrix(1.0, 1.0), alpha=False)
+            _img.close()
+            _buf = io.BytesIO()
+            _buf.write(_pix.tobytes("jpeg", jpg_quality=75))
+            upload_thumbnail(_buf.getvalue(), doc_id)
+        except Exception as _thumb_err:
+            logger.warning("Image thumbnail generation failed for %s: %s", doc_id, _thumb_err)
 
     # Run copyright check (skip entirely for question_paper)
     pages = []
@@ -183,8 +197,9 @@ async def upload_document(
             pages = extract_text_from_pdf(file_bytes)
         elif file_type == "docx":
             pages = extract_text_from_docx(file_bytes)
-        elif file_type == "pptx":
+        elif file_type in ("pptx", "ppt"):
             pages = extract_text_from_pptx(file_bytes)
+        # jpg/png: skip pre-extraction here; the pipeline will run OCR in the background
 
         is_flagged, flag_reason = run_copyright_check(file_bytes, pages, file_hash, user["id"], db)
         if is_flagged:
@@ -461,6 +476,9 @@ async def proxy_document(doc_id: str, user: dict = Depends(get_current_user)):
         "pdf": "application/pdf",
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "ppt": "application/vnd.ms-powerpoint",
+        "jpg": "image/jpeg",
+        "png": "image/png",
     }
 
     # Download document from Supabase storage using the path (stored in public_id)
@@ -517,8 +535,9 @@ async def get_document_thumbnail(doc_id: str, user: dict = Depends(get_current_u
         raise HTTPException(status_code=404, detail="Document not found")
 
     row = result.data
-    if row.get("file_type") != "pdf":
-        raise HTTPException(status_code=415, detail="Thumbnail only available for PDF documents")
+    # Thumbnails are generated for both PDFs and images (jpg/png)
+    if row.get("file_type") not in ("pdf", "jpg", "png"):
+        raise HTTPException(status_code=415, detail="Thumbnail not available for this file type")
     if row.get("processing_status") not in ("ready", "pending", "processing"):
         raise HTTPException(status_code=409, detail="Document not available")
 

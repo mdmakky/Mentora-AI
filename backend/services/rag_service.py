@@ -463,11 +463,13 @@ async def process_document_pipeline(
             pages = preextracted_pages
 
         else:
-            from services.pdf_service import extract_text_from_docx, extract_text_from_pptx
+            from services.pdf_service import extract_text_from_docx, extract_text_from_pptx, extract_text_from_image
             if file_type == "docx":
                 pages = extract_text_from_docx(file_bytes)
-            elif file_type == "pptx":
+            elif file_type in ("pptx", "ppt"):
                 pages = extract_text_from_pptx(file_bytes)
+            elif file_type in ("jpg", "png"):
+                pages, ocr_applied = extract_text_from_image(file_bytes, file_type)
             else:
                 raise ValueError(f"Unsupported file type: {file_type}")
 

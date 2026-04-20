@@ -192,12 +192,22 @@ const DocumentView = () => {
           )
         )}
 
-        <PDFViewer
-          url={pdfUrl}
-          targetPage={targetPage}
-          targetCitation={targetCitation}
-          onVisiblePageChange={setCurrentPage}
-        />
+        {currentDoc.file_type === 'jpg' || currentDoc.file_type === 'png' ? (
+          <div className="flex-1 overflow-auto flex items-start justify-center bg-slate-100 p-4">
+            <img
+              src={pdfUrl}
+              alt={currentDoc.file_name}
+              className="max-w-full rounded shadow-md object-contain"
+            />
+          </div>
+        ) : (
+          <PDFViewer
+            url={pdfUrl}
+            targetPage={targetPage}
+            targetCitation={targetCitation}
+            onVisiblePageChange={setCurrentPage}
+          />
+        )}
       </div>
 
       {/* Chat Panel */}
