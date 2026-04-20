@@ -91,6 +91,18 @@ async def upload_document(
     if not declaration_accepted:
         raise HTTPException(status_code=400, detail="You must accept the anti-piracy declaration")
 
+    # Validate that the course exists and belongs to the current user
+    db = get_supabase_admin()
+    course_check = (
+        db.table("courses")
+        .select("id")
+        .eq("id", course_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    if not course_check.data:
+        raise HTTPException(status_code=404, detail="Course not found. Please create the course first before uploading documents to it.")
+
     # Validate file type
     file_type = ALLOWED_TYPES.get(file.content_type)
     if not file_type:
@@ -101,7 +113,6 @@ async def upload_document(
     if len(file_bytes) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
 
-    db = get_supabase_admin()
     doc_id = str(uuid.uuid4())
 
     # Calculate file hash

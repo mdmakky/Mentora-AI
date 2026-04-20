@@ -111,7 +111,7 @@ const QuestionLabSection = ({ courseId, course }) => {
     patternData, analyzedAt, analyzeState, analyzeError,
     practiceQuestions, generateState, generateError, savedCount,
     generationRuns, generationsLoading, selectedGenerationId,
-    paperCount,
+    paperCount, subjectWarnings,
     fetchHotTopics, addHotTopic, deleteHotTopic,
     loadCachedAnalysis, analyzePapers, generatePractice, loadSavedPractice, loadPracticeGenerations,
     setSelectedGeneration, renameGeneration, deleteGeneration,
@@ -163,6 +163,17 @@ const QuestionLabSection = ({ courseId, course }) => {
   const hasPapers = questionPapers.length > 0;
   const hasAnalysis = analyzeState === 'done' && patternData;
   const hasQuestions = practiceQuestions.length > 0;
+
+  // Lecture docs = any ready doc that is NOT a question paper and belongs to this course
+  const hasLectureDocs = useMemo(
+    () => safeDocuments.some(
+      (d) => d.doc_category !== 'question_paper'
+        && !d.is_deleted
+        && d.processing_status === 'ready'
+        && (!courseId || d.course_id === courseId)
+    ),
+    [safeDocuments, courseId]
+  );
 
   const currentStep = hasQuestions ? 3 : hasAnalysis ? 2 : 1;
 
@@ -462,6 +473,31 @@ const QuestionLabSection = ({ courseId, course }) => {
               </div>
             </div>
           </div>
+
+          {/* Subject mismatch warning */}
+          {hasAnalysis && subjectWarnings && subjectWarnings.length > 0 && (
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs leading-snug mb-2">
+              <span className="shrink-0 mt-0.5">🚨</span>
+              <span>
+                <strong>Subject mismatch detected.</strong>{' '}
+                The following paper{subjectWarnings.length > 1 ? 's appear' : ' appears'} to be from a different subject than this course:
+                {' '}{subjectWarnings.map((w) => `"${w.file_name}" (detected: ${w.detected_subject})`).join(', ')}.
+                {' '}Generated questions may be inaccurate. Consider removing{subjectWarnings.length > 1 ? ' them' : ' it'} and re-analyzing.
+              </span>
+            </div>
+          )}
+
+          {/* No-lecture-content warning */}
+          {hasAnalysis && !hasLectureDocs && (
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs leading-snug mb-2">
+              <span className="shrink-0 mt-0.5">⚠️</span>
+              <span>
+                <strong>No lecture notes uploaded for this course.</strong>{' '}
+                Questions will be based on past paper patterns only and may lack factual detail.{' '}
+                Upload your lecture PDFs/slides to the Documents tab for better quality questions.
+              </span>
+            </div>
+          )}
 
           {/* CTA Button */}
           <div className="ql-cta-row">

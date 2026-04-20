@@ -79,6 +79,7 @@ Analyze ALL pages of this question paper carefully. Pay special attention to:
 
 Return a JSON object with this EXACT structure (no markdown, just raw JSON):
 {{
+  "detected_subject": "the actual academic subject/discipline of this paper e.g. Chemistry, Mathematics, Computer Science",
   "paper_title": "short title or exam session e.g. Final Exam 2023",
   "total_marks": 72,
   "total_questions": 8,

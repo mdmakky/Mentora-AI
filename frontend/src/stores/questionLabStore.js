@@ -29,6 +29,9 @@ const useQuestionLabStore = create((set, get) => ({
   // How many past question papers are in this course
   paperCount: 0,
 
+  // Subject mismatch warnings from last analysis run
+  subjectWarnings: [],
+
   // ─── Hot Topics ───────────────────────────────────
   fetchHotTopics: async (courseId) => {
     set({ hotTopicsLoading: true });
@@ -83,6 +86,7 @@ const useQuestionLabStore = create((set, get) => ({
         patternData: data.pattern,
         analyzedAt: new Date().toISOString(),
         analyzeState: 'done',
+        subjectWarnings: data.subject_warnings || [],
       });
       return { success: true };
     } catch (err) {
@@ -257,6 +261,7 @@ const useQuestionLabStore = create((set, get) => ({
     generationsLoading: false,
     selectedGenerationId: null,
     paperCount: 0,
+    subjectWarnings: [],
   }),
 }));
 

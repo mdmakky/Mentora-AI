@@ -528,6 +528,20 @@ async def get_attempt_summary(
 # QUESTION LAB — New Endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _is_subject_mismatch(detected: str, course_name: str) -> bool:
+    """Heuristic: returns True if detected subject shares no significant words with course_name."""
+    if not detected or not course_name:
+        return False
+    stop = {
+        'the', 'of', 'and', 'for', 'in', 'a', 'an', 'to', 'course', 'class',
+        'subject', 'exam', 'paper', 'test', 'final', 'mid', 'term', 'advanced',
+        'introduction', 'basic', 'applied', 'engineering', 'science', 'study',
+    }
+    d_words = {w.lower() for w in detected.split() if w.lower() not in stop and len(w) > 2}
+    c_words = {w.lower() for w in course_name.split() if w.lower() not in stop and len(w) > 2}
+    return bool(d_words) and len(d_words & c_words) == 0
+
+
 @router.post("/analyze-papers/{course_id}")
 async def analyze_past_papers(course_id: str, user: dict = Depends(get_current_user)):
     """
@@ -561,6 +575,7 @@ async def analyze_past_papers(course_id: str, user: dict = Depends(get_current_u
     # Analyze each paper via vision
     paper_results = []
     paper_doc_ids = []
+    subject_warnings = []
     rate_limited_docs = 0
 
     for idx, doc in enumerate(docs):
@@ -589,6 +604,13 @@ async def analyze_past_papers(course_id: str, user: dict = Depends(get_current_u
                 analysis["_doc_name"] = doc["file_name"]
                 paper_results.append(analysis)
                 paper_doc_ids.append(doc["id"])
+                # Check if this paper's subject matches the course
+                detected_subject = analysis.get("detected_subject", "")
+                if detected_subject and _is_subject_mismatch(detected_subject, course_name):
+                    subject_warnings.append({
+                        "file_name": doc["file_name"],
+                        "detected_subject": detected_subject,
+                    })
         except HTTPException:
             raise
         except Exception as e:
@@ -647,6 +669,7 @@ async def analyze_past_papers(course_id: str, user: dict = Depends(get_current_u
         "status": "ok",
         "papers_analyzed": len(paper_results),
         "pattern": merged,
+        "subject_warnings": subject_warnings,
     }
 
 
@@ -700,13 +723,15 @@ async def generate_practice_questions(
     course = db.table("courses").select("course_name").eq("id", course_id).single().execute()
     course_name = course.data.get("course_name", "Course") if course.data else "Course"
 
-    # Fetch RAG chunks for course context (exclude question_paper docs)
-    qp_doc_ids_row = db.table("paper_analyses") \
-        .select("paper_doc_ids") \
+    # Fetch RAG chunks for course context — exclude question_paper docs so the AI
+    # gets lecture/study material only, not recycled question text from past papers.
+    qp_doc_ids_row = db.table("documents") \
+        .select("id") \
         .eq("course_id", course_id) \
         .eq("user_id", user["id"]) \
+        .eq("doc_category", "question_paper") \
         .execute()
-    qp_doc_ids = qp_doc_ids_row.data[0].get("paper_doc_ids", []) if qp_doc_ids_row.data else []
+    qp_doc_ids = [r["id"] for r in (qp_doc_ids_row.data or [])]
 
     chunks_query = db.table("document_chunks") \
         .select("content") \
@@ -714,6 +739,10 @@ async def generate_practice_questions(
         .eq("user_id", user["id"]) \
         .order("chunk_index") \
         .limit(50)
+
+    # Apply exclusion only if there are question-paper doc IDs to exclude
+    if qp_doc_ids:
+        chunks_query = chunks_query.not_.in_("document_id", qp_doc_ids)
 
     chunks_result = chunks_query.execute()
     course_content = "\n\n".join(c["content"] for c in (chunks_result.data or []))
@@ -825,6 +854,8 @@ async def generate_practice_questions(
         "insert_failed_count": insert_failed_count,
         "generation_id": generation_run_id,
         "course_name": course_name,
+        # Let the client know if we had no lecture material to ground the questions
+        "no_lecture_content": not bool(course_content.strip()),
     }
 
 
