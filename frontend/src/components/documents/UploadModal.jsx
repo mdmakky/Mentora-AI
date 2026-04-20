@@ -100,18 +100,18 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
   const onDrop = useCallback((accepted) => {
     if (accepted.length > 0) {
       setFiles((prev) => {
-        const newFiles = isQuestionPaper ? [...prev, ...accepted] : [accepted[0]];
-        return newFiles.slice(0, 10); // Cap at 10 files
+        const combined = [...prev, ...accepted];
+        return combined.slice(0, 10); // Cap at 10 files
       });
       setError('');
       setSuccess(false);
     }
-  }, [isQuestionPaper]);
+  }, []);
 
   const onDropRejected = useCallback((rejected) => {
-    if (rejected.length > 0) {
-      setError(`Rejected file: ${rejected[0].file.name}. Ensure it's a valid format and under 50MB.`);
-    }
+    if (rejected.length === 0) return;
+    const file = rejected[0].file;
+    setError(`Rejected file: ${file.name}. Ensure it's a valid format (PDF, DOCX, PPT, PPTX, JPG, PNG) and under 50MB.`);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -121,6 +121,7 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
       'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+      'application/vnd.ms-powerpoint': ['.ppt'],
       'image/jpeg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],
     },
@@ -323,8 +324,7 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
                   {isDragActive ? 'Drop your files here' : 'Drag & drop or click to browse'}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  PDF, DOCX, PPTX, JPG, PNG · Max 50MB
-                  {isQuestionPaper ? ' (Up to 10 files)' : ''}
+                  PDF, DOCX, PPTX, JPG, PNG · Max 50MB · Up to 10 files
                 </p>
               </>
             )}

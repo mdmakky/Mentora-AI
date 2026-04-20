@@ -20,3 +20,6 @@ __pycache__/
 # Editor/OS files
 .DS_Store
 .vscode/
+
+/Project_Report
+refarance.txt

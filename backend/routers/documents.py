@@ -31,9 +31,10 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
 ALLOWED_TYPES = {
-    "application/pdf": "pdf", 
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", 
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.ms-powerpoint": "ppt",
     "image/jpeg": "jpg",
     "image/png": "png",
 }
@@ -90,7 +91,7 @@ async def upload_document(
     # Validate file type
     file_type = ALLOWED_TYPES.get(file.content_type)
     if not file_type:
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, PPTX, JPG, and PNG files are allowed")
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, PPTX, PPT, JPG, and PNG files are allowed")
 
     # Read file
     file_bytes = await file.read()
@@ -117,8 +118,8 @@ async def upload_document(
     if dup_check.data:
         raise HTTPException(status_code=400, detail="This file has already been uploaded to this course")
 
-    # Auto-convert DOCX and PPTX files to PDF using LibreOffice
-    if file_type in ["docx", "pptx"]:
+    # Auto-convert DOCX, PPTX, and PPT files to PDF using LibreOffice
+    if file_type in ["docx", "pptx", "ppt"]:
         try:
             file_bytes = convert_to_pdf(file_bytes, file_type)
             file_type = "pdf"

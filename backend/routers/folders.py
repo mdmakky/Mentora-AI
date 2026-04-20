@@ -26,6 +26,22 @@ async def list_folders(course_id: str, user: dict = Depends(get_current_user)):
 async def create_folder(data: FolderCreate, user: dict = Depends(get_current_user)):
     """Create a new folder."""
     db = get_supabase_admin()
+
+    # Prevent duplicate folder names in the same course + parent scope
+    existing = (
+        db.table("folders")
+        .select("id")
+        .eq("course_id", data.course_id)
+        .eq("user_id", user["id"])
+        .eq("name", data.name)
+        .execute()
+    )
+    if existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A folder named '{data.name}' already exists in this course.",
+        )
+
     result = db.table("folders").insert({
         "course_id": data.course_id,
         "user_id": user["id"],

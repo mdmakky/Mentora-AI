@@ -28,6 +28,7 @@ const CourseView = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
+  const [folderError, setFolderError] = useState('');
   const [activeTab, setActiveTab] = useState('documents');
 
   const getCourse = useCourseStore((s) => s.getCourse);
@@ -66,7 +67,12 @@ const CourseView = () => {
 
   const handleCreateFolder = async (e) => {
     e.preventDefault();
-    await createFolder({ course_id: courseId, name: folderName, parent_id: activeFolder });
+    setFolderError('');
+    const result = await createFolder({ course_id: courseId, name: folderName, parent_id: activeFolder });
+    if (!result.success) {
+      setFolderError(result.error || 'Failed to create folder');
+      return;
+    }
     setShowNewFolder(false);
     setFolderName('');
   };
@@ -237,18 +243,19 @@ const CourseView = () => {
       {/* Modals */}
       <UploadModal isOpen={showUpload} onClose={() => setShowUpload(false)} courseId={courseId} folderId={activeFolder} />
 
-      <Modal isOpen={showNewFolder} onClose={() => setShowNewFolder(false)} title="Create Folder">
+      <Modal isOpen={showNewFolder} onClose={() => { setShowNewFolder(false); setFolderError(''); }} title="Create Folder">
         <form onSubmit={handleCreateFolder} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1">Folder Name</label>
             <input
               type="text" required placeholder="Lecture Notes" value={folderName}
-              onChange={(e) => setFolderName(e.target.value)}
+              onChange={(e) => { setFolderName(e.target.value); setFolderError(''); }}
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition"
             />
+            {folderError && <p className="mt-1.5 text-sm text-red-600">{folderError}</p>}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" type="button" onClick={() => setShowNewFolder(false)}>Cancel</Button>
+            <Button variant="ghost" size="sm" type="button" onClick={() => { setShowNewFolder(false); setFolderError(''); }}>Cancel</Button>
             <Button size="sm" type="submit">Create</Button>
           </div>
         </form>
