@@ -93,7 +93,7 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
   const [category, setCategory] = useState(forceCategory || 'lecture');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const { uploading, uploadDocument } = useDocumentStore();
+  const { startUploadBackground } = useDocumentStore();
 
   const effectiveCategory = forceCategory || category;
 
@@ -134,34 +134,16 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
     setFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  const handleUpload = async () => {
+  const handleUpload = () => {
     if (files.length === 0) return setError('Please select a file');
     if (!declared) return setError('You must accept the anti-piracy declaration');
-    setError('');
-    
-    // Upload files sequentially
-    let hasError = false;
-    for (const file of files) {
-      const result = await uploadDocument(file, courseId, folderId, effectiveCategory);
-      if (!result.success) {
-        // If backend returns a suspension 403, switch to suspension UI
-        if (result.error?.includes('suspended')) {
-          setFreshSuspended(true);
-          refreshUser();
-          apiClient.get('/auth/me').then(data => {
-            setFreshSuspendedAt(data?.upload_suspended_at ?? null);
-          }).catch(() => {});
-          return;
-        }
-        setError(result.error || `Upload failed for ${file.name}`);
-        hasError = true;
-        break;
-      }
-    }
-
-    if (!hasError) {
-      setSuccess(true);
-      setTimeout(() => { handleReset(); onClose(); }, 1500);
+    // Close the modal immediately — uploads run in the background.
+    // Each file gets a placeholder card in the course view showing upload progress.
+    const filesToUpload = [...files];
+    handleReset();
+    onClose();
+    for (const file of filesToUpload) {
+      startUploadBackground(file, courseId, folderId, effectiveCategory);
     }
   };
 
@@ -368,7 +350,7 @@ const UploadModal = ({ isOpen, onClose, courseId, folderId, forceCategory }) => 
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={handleClose}>Cancel</Button>
-            <Button size="sm" onClick={handleUpload} loading={uploading} disabled={files.length === 0 || !declared}>
+            <Button size="sm" onClick={handleUpload} disabled={files.length === 0 || !declared}>
               <Upload size={15} /> Upload {files.length > 1 ? `(${files.length})` : ''}
             </Button>
           </div>

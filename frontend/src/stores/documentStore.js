@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '../lib/apiClient';
 import { getSmartStorage } from '../lib/customStorage';
+import useAuthStore from './authStore';
 
 const useDocumentStore = create(
   persist(
@@ -58,6 +59,49 @@ const useDocumentStore = create(
     }
   },
 
+  // Fire-and-forget upload: adds a placeholder card instantly, closes modal immediately.
+  // The actual HTTP upload runs in the background; on completion the placeholder is
+  // replaced with the real document (triggering the existing polling flow).
+  startUploadBackground: (file, courseId, folderId, docCategory = 'lecture') => {
+    const tempId = `uploading-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    set((s) => ({
+      documents: [{
+        id: tempId,
+        file_name: file.name,
+        processing_status: 'uploading',
+        course_id: courseId,
+        folder_id: folderId || null,
+        _isPlaceholder: true,
+      }, ...s.documents],
+    }));
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('course_id', courseId);
+    if (folderId) formData.append('folder_id', folderId);
+    formData.append('doc_category', docCategory);
+    formData.append('declaration_accepted', 'true');
+
+    apiClient.postForm('/documents/upload', formData)
+      .then((data) => {
+        set((s) => ({
+          documents: s.documents.map((d) => d.id === tempId ? data : d),
+        }));
+      })
+      .catch((err) => {
+        if (err.message?.toLowerCase().includes('suspended')) {
+          try { useAuthStore.getState().refreshUser?.(); } catch {}
+        }
+        set((s) => ({
+          documents: s.documents.map((d) =>
+            d.id === tempId
+              ? { ...d, processing_status: 'upload_failed', _uploadError: err.message }
+              : d
+          ),
+        }));
+      });
+  },
+
   uploadDocument: async (file, courseId, folderId, docCategory = 'lecture') => {
     set({ uploading: true, uploadProgress: 0 });
     try {
@@ -83,6 +127,11 @@ const useDocumentStore = create(
   },
 
   deleteDocument: async (docId) => {
+    // Placeholder cards (fire-and-forget uploads) live only in memory — no API call needed
+    if (docId.startsWith('uploading-')) {
+      set((s) => ({ documents: s.documents.filter((d) => d.id !== docId) }));
+      return { success: true };
+    }
     try {
       await apiClient.delete(`/documents/${docId}`);
       set((s) => ({
@@ -199,6 +248,11 @@ const useDocumentStore = create(
     {
       name: 'mentora-document-store',
       storage: getSmartStorage(),
+      // Exclude in-flight placeholder docs from hitting localStorage
+      partialize: (state) => ({
+        ...state,
+        documents: state.documents.filter((d) => !d._isPlaceholder),
+      }),
     }
   )
 );

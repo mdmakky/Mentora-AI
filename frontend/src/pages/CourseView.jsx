@@ -24,7 +24,9 @@ const CourseView = () => {
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
-  const [activeFolder, setActiveFolder] = useState(null);
+  const [activeFolder, setActiveFolder] = useState(
+    () => sessionStorage.getItem(`mentora:folder:${courseId}`) || null
+  );
   const [viewMode, setViewMode] = useState('grid');
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [folderName, setFolderName] = useState('');
@@ -51,7 +53,9 @@ const CourseView = () => {
       setLoading(true);
       const c = await getCourse(courseId);
       setCourse(c);
-      await Promise.all([fetchDocuments(courseId), fetchFolders(courseId)]);
+      // Restore the last active folder so the right documents load on re-entry
+      const savedFolder = sessionStorage.getItem(`mentora:folder:${courseId}`) || null;
+      await Promise.all([fetchDocuments(courseId, savedFolder), fetchFolders(courseId)]);
       setLoading(false);
     };
     load();
@@ -62,6 +66,8 @@ const CourseView = () => {
 
   const handleFolderSelect = (folderId) => {
     setActiveFolder(folderId);
+    if (folderId) sessionStorage.setItem(`mentora:folder:${courseId}`, folderId);
+    else sessionStorage.removeItem(`mentora:folder:${courseId}`);
     fetchDocuments(courseId, folderId);
   };
 

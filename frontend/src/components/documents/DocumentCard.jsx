@@ -8,6 +8,8 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 
 const statusConfig = {
+  uploading: { label: 'Uploading…', icon: Loader2, cls: 'badge-info', spin: true },
+  upload_failed: { label: 'Upload Failed', icon: AlertTriangle, cls: 'badge-danger' },
   pending: { label: 'Processing', icon: Loader2, cls: 'badge-warning', spin: true },
   processing: { label: 'Processing', icon: Loader2, cls: 'badge-warning', spin: true },
   ready: { label: 'Ready', icon: CheckCircle, cls: 'badge-success' },
@@ -47,8 +49,12 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
     }
   };
 
+  const isPlaceholder = doc._isPlaceholder === true;
+
   const handleDelete = (e) => {
     e.stopPropagation();
+    // For failed placeholder cards (no real DB record) skip the confirm dialog
+    if (isPlaceholder) { deleteDocument(doc.id); return; }
     setConfirmOpen(true);
   };
 
@@ -56,6 +62,7 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
     await deleteDocument(doc.id);
   };
 
+  const canDelete = doc.processing_status !== 'uploading';
   const canRescan = doc.processing_status === 'quarantined' || doc.processing_status === 'failed';
   // Review request is only meaningful for copyright-flagged/quarantined docs
   const canRequestReview = doc.processing_status === 'quarantined' || doc.copyright_flag === true;
@@ -130,12 +137,14 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
             {reviewPending ? 'Review Pending' : 'Request Review'}
           </button>
         )}
-        <button
-          onClick={handleDelete}
-          className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 w-7 h-7 rounded-md flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
-        >
-          <Trash2 size={14} />
-        </button>
+        {canDelete && (
+          <button
+            onClick={handleDelete}
+            className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 w-7 h-7 rounded-md flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
     );
   }
@@ -196,16 +205,21 @@ const DocumentCard = ({ doc, viewMode = 'grid', courseId }) => {
                   <ShieldQuestion size={13} />
                 </button>
               )}
-              <button
-                onClick={handleDelete}
-                className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-rose-500 transition"
-              >
-                <Trash2 size={13} />
-              </button>
+              {canDelete && (
+                <button
+                  onClick={handleDelete}
+                  className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-slate-300 hover:text-rose-500 transition"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
             </div>
           </div>
           {doc.flag_reason && canRescan && (
             <p className="mt-2 text-[10px] text-rose-500 line-clamp-2" title={doc.flag_reason}>{doc.flag_reason}</p>
+          )}
+          {doc._uploadError && (
+            <p className="mt-2 text-[10px] text-rose-500 line-clamp-2" title={doc._uploadError}>{doc._uploadError}</p>
           )}
           {actionError && (
             <p className="mt-2 text-[10px] text-rose-500 line-clamp-2" title={actionError}>{actionError}</p>
