@@ -32,6 +32,7 @@ const CourseView = () => {
   const [folderName, setFolderName] = useState('');
   const [folderError, setFolderError] = useState('');
   const [activeTab, setActiveTab] = useState('documents');
+  const [docsLoading, setDocsLoading] = useState(false);
 
   const getCourse = useCourseStore((s) => s.getCourse);
   const { documents, folders, fetchDocuments, fetchFolders, createFolder, pollDocumentStatus } = useDocumentStore();
@@ -64,11 +65,13 @@ const CourseView = () => {
 
   useEffect(() => { startPollingPending(documents); }, [documents]);
 
-  const handleFolderSelect = (folderId) => {
+  const handleFolderSelect = async (folderId) => {
     setActiveFolder(folderId);
     if (folderId) sessionStorage.setItem(`mentora:folder:${courseId}`, folderId);
     else sessionStorage.removeItem(`mentora:folder:${courseId}`);
-    fetchDocuments(courseId, folderId);
+    setDocsLoading(true);
+    await fetchDocuments(courseId, folderId);
+    setDocsLoading(false);
   };
 
   const handleCreateFolder = async (e) => {
@@ -226,7 +229,19 @@ const CourseView = () => {
               </div>
             </div>
 
-            {filteredDocs.length === 0 ? (
+            {docsLoading ? (
+              <div className={viewMode === 'grid' ? 'grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4' : 'space-y-2'}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="card overflow-hidden animate-pulse">
+                    <div className="h-36 bg-slate-100" />
+                    <div className="p-3 space-y-2">
+                      <div className="h-3.5 bg-slate-200 rounded w-3/4" />
+                      <div className="h-3 bg-slate-100 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filteredDocs.length === 0 ? (
               <EmptyState
                 icon={FileText}
                 title="No documents yet"
