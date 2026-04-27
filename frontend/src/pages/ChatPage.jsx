@@ -134,14 +134,31 @@ const ChatPage = () => {
     (courses[sem.id] || []).map((c) => ({ ...c, semesterName: sem.name }))
   );
 
-  // Load sessions when course changes
+  // Auto-select first course when courses load and nothing is selected
   useEffect(() => {
-    if (selectedCourse) {
-      fetchSessions(selectedCourse);
-    } else {
-      fetchSessions();
+    if (!selectedCourse && allCourses.length > 0) {
+      const courseParam = searchParams.get('course');
+      if (!courseParam) {
+        setSelectedCourse(allCourses[0].id);
+      }
     }
-  }, [selectedCourse, fetchSessions]);
+  }, [allCourses.length]); // eslint-disable-line
+
+  // Load sessions when course changes; restore active session from URL after load
+  useEffect(() => {
+    const load = async () => {
+      if (selectedCourse) {
+        await fetchSessions(selectedCourse);
+      } else {
+        await fetchSessions();
+      }
+      const sessionParam = searchParams.get('session');
+      if (sessionParam) {
+        selectSession(sessionParam);
+      }
+    };
+    load();
+  }, [selectedCourse, fetchSessions]); // eslint-disable-line
 
   const coachSessions = sessions.filter((s) => isCoachSession(s.title));
 
@@ -194,12 +211,25 @@ const ChatPage = () => {
     }
     const courseId = selectedCourse || allCourses[0]?.id;
     if (!courseId) return;
-    await createSession(courseId, 'COACH::New Study Session');
+    const result = await createSession(courseId, 'COACH::New Study Session');
+    if (result?.success && result?.data?.id) {
+      const params = { course: courseId, session: result.data.id };
+      setSearchParams(params, { replace: true });
+    }
   };
 
   const handleCourseChange = (courseId) => {
     setSelectedCourse(courseId || null);
+    // Clear session from URL when switching course — the session belongs to the old course
     setSearchParams(courseId ? { course: courseId } : {}, { replace: true });
+  };
+
+  const handleSelectSession = (sessionId) => {
+    selectSession(sessionId);
+    const params = {};
+    if (selectedCourse) params.course = selectedCourse;
+    if (sessionId) params.session = sessionId;
+    setSearchParams(params, { replace: true });
   };
 
   const handleStartRename = (session, e) => {
@@ -238,6 +268,12 @@ const ChatPage = () => {
       URL.revokeObjectURL(url);
       toast.success('Session exported as Markdown');
     }
+  };
+
+  const handlePromptCard = (content) => {
+    // Populate the textarea so users can edit before sending
+    setText(content);
+    setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
   const handleSend = async () => {
@@ -422,7 +458,7 @@ const ChatPage = () => {
                 ) : (
                   <>
                     <button
-                      onClick={() => selectSession(s.id)}
+                      onClick={() => handleSelectSession(s.id)}
                       className="text-xs font-medium truncate flex-1 text-left"
                     >
                       {stripCoachPrefix(s.title)}
@@ -439,6 +475,11 @@ const ChatPage = () => {
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteSession(s.id);
+                          if (searchParams.get('session') === s.id) {
+                            const params = {};
+                            if (selectedCourse) params.course = selectedCourse;
+                            setSearchParams(params, { replace: true });
+                          }
                         }}
                         className="text-slate-300 hover:text-rose-500 p-0.5"
                         title="Delete"
@@ -522,7 +563,7 @@ const ChatPage = () => {
                   <button
                     key={action.label}
                     type="button"
-                    onClick={() => handleSendWithText(action.prompt)}
+                    onClick={() => handlePromptCard(action.prompt)}
                     className="px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition"
                   >
                     {action.label}
@@ -547,23 +588,23 @@ const ChatPage = () => {
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-6">
           {!activeSession ? (
-            <div className="max-w-2xl mx-auto py-8 sm:py-10 space-y-6">
+            <div className="max-w-2xl mx-auto py-6 sm:py-10 space-y-6">
 
-              {/* Personalized greeting */}
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center shrink-0">
-                  <Sparkles size={22} className="text-violet-500" />
+              {/* Header */}
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-2xl bg-linear-to-br from-violet-100 to-emerald-100 flex items-center justify-center shrink-0">
+                  <Sparkles size={20} className="text-violet-500" />
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold text-slate-800">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-bold text-slate-800">
                     {streak?.current_streak > 0
                       ? `🔥 ${streak.current_streak}-day streak — keep it going!`
-                      : 'Ready to study?'}
+                      : 'Study Coach'}
                   </h2>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     {todayStats?.total_minutes > 0
                       ? `${formatTime(todayStats.total_minutes)} studied today · Goal: ${formatTime(todayStats.goal_minutes)}`
-                      : 'No study time logged today yet — start a session below'}
+                      : 'Course-grounded planning, revision, and practice.'}
                   </p>
                 </div>
               </div>
@@ -572,12 +613,29 @@ const ChatPage = () => {
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
                   <p className="text-sm font-semibold text-amber-800 mb-1">No courses found</p>
                   <p className="text-xs text-amber-700">
-                    Go to <strong>Courses</strong> and add at least one course first. Study Coach needs a course to work with your materials.
+                    Go to <strong>Courses</strong> and add at least one course first.
                   </p>
                 </div>
               ) : (
                 <>
-                  {/* Paper analysis topics panel */}
+                  {/* Course selector — prominent and inline */}
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Working on</p>
+                    <select
+                      value={selectedCourse || ''}
+                      onChange={(e) => handleCourseChange(e.target.value || null)}
+                      className="w-full text-sm rounded-xl border border-slate-200 px-4 py-2.5 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition bg-white font-medium text-slate-700"
+                    >
+                      <option value="">All courses (no course focus)</option>
+                      {allCourses.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.course_code} — {c.course_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* High-priority topics from past papers */}
                   {selectedCourse && (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
@@ -598,9 +656,9 @@ const ChatPage = () => {
                           {highProbTopics.map((t) => (
                             <button
                               key={t.topic}
-                              onClick={() => handleSendWithText(`Teach me about "${t.topic}" for the exam — it appears ${t.frequency} times in past papers`)}
+                              onClick={() => handlePromptCard(`Teach me about "${t.topic}" for the exam — it appears ${t.frequency} times in past papers`)}
                               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold hover:bg-rose-100 transition"
-                              title="Click to start a focused session on this topic"
+                              title="Click to pre-fill this topic in the chat box"
                             >
                               🔴 {t.topic}
                               {t.frequency > 1 && <span className="text-rose-400 font-normal">×{t.frequency}</span>}
@@ -612,14 +670,14 @@ const ChatPage = () => {
                             .map((t) => (
                               <button
                                 key={t.topic}
-                                onClick={() => handleSendWithText(`Give me an overview of "${t.topic}" for exam preparation`)}
+                                onClick={() => handlePromptCard(`Give me an overview of "${t.topic}" for exam preparation`)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition"
                               >
                                 🟡 {t.topic}
                               </button>
                             ))}
                           <p className="w-full text-[10px] text-slate-400 mt-1">
-                            Click any topic to start a focused session immediately.
+                            Click any topic to pre-fill it in the chat box.
                           </p>
                         </div>
                       ) : (
@@ -635,52 +693,24 @@ const ChatPage = () => {
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">What do you want to do?</p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
-                        { emoji: '🧠', title: 'Learn', desc: 'Understand a concept', prompt: 'Teach me the most important concept from my course materials in a clear, structured way', mode: 'learn' },
-                        { emoji: '🎯', title: 'Practice', desc: 'Self-test with questions', prompt: 'Generate 5 practice questions from my course materials and quiz me step by step', mode: 'practice' },
-                        { emoji: '📋', title: 'Summarize', desc: 'Key points only', prompt: 'Create a concise revision summary with bullet points of the most important topics in this course', mode: 'summary' },
-                        { emoji: '🗓️', title: 'Study Plan', desc: 'Build a schedule', prompt: 'Create a focused 7-day study plan for my upcoming exam based on my course materials and most important topics', mode: 'exam' },
+                        { emoji: '🧠', title: 'Learn', desc: 'Understand a concept', prompt: 'Teach me the most important concept from my course materials in a clear, structured way', hover: 'hover:border-violet-300 hover:bg-violet-50/60 group-hover:text-violet-800' },
+                        { emoji: '🎯', title: 'Practice', desc: 'Self-test with questions', prompt: 'Generate 5 practice questions from my course materials and quiz me step by step', hover: 'hover:border-emerald-300 hover:bg-emerald-50/60 group-hover:text-emerald-800' },
+                        { emoji: '📋', title: 'Summarize', desc: 'Key points only', prompt: 'Create a concise revision summary with the most important topics in this course', hover: 'hover:border-blue-300 hover:bg-blue-50/60 group-hover:text-blue-800' },
+                        { emoji: '📅', title: 'Study Plan', desc: 'Build a schedule', prompt: 'Create a focused 7-day study plan for my upcoming exam based on my course materials', hover: 'hover:border-amber-300 hover:bg-amber-50/60 group-hover:text-amber-800' },
                       ].map((item) => (
                         <button
                           key={item.title}
-                          onClick={() => {
-                            handlePreferenceChange('responseMode', item.mode);
-                            handleSendWithText(item.prompt);
-                          }}
-                          disabled={sending}
-                          className="rounded-xl border border-slate-200 bg-white p-3 hover:border-emerald-300 hover:bg-emerald-50/60 transition text-left group disabled:opacity-50"
+                          onClick={() => handlePromptCard(item.prompt)}
+                          className={`rounded-xl border border-slate-200 bg-white p-3 transition text-left group ${item.hover}`}
                         >
                           <span className="text-xl block mb-1.5">{item.emoji}</span>
-                          <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-800">{item.title}</p>
+                          <p className="text-xs font-bold text-slate-800">{item.title}</p>
                           <p className="text-[10px] text-slate-400 leading-tight mt-0.5 hidden sm:block">{item.desc}</p>
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  {/* Starter prompts — also auto-send */}
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Or ask directly</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {starterPrompts.map(({ q, icon }) => (
-                        <button
-                          key={q}
-                          onClick={() => handleSendWithText(q)}
-                          disabled={sending}
-                          className="text-left text-xs px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition flex items-start gap-2 disabled:opacity-50"
-                        >
-                          <span className="text-sm shrink-0">{icon}</span>
-                          <span>{q}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {!selectedCourse && (
-                    <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                      <Target size={11} />
-                      Select a course in the sidebar for material-grounded answers with citations.
-                    </p>
-                  )}
                 </>
               )}
             </div>
