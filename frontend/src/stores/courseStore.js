@@ -107,37 +107,60 @@ const useCourseStore = create(
   },
 
   createSemester: async (payload) => {
+    // Optimistic: add a placeholder immediately
+    const tempId = `temp-sem-${Date.now()}`;
+    const optimistic = { id: tempId, _optimistic: true, ...payload };
+    set((s) => ({ semesters: sortSemesters(dedupeById([...s.semesters, optimistic])) }));
     try {
       const data = await apiClient.post('/semesters', payload);
-      set((s) => ({ semesters: sortSemesters(dedupeById([...s.semesters, data])) }));
+      // Replace placeholder with real server row
+      set((s) => ({
+        semesters: sortSemesters(dedupeById(s.semesters.map((sem) => sem.id === tempId ? data : sem))),
+      }));
       return { success: true, data };
     } catch (err) {
+      // Rollback
+      set((s) => ({ semesters: s.semesters.filter((sem) => sem.id !== tempId) }));
       return { success: false, error: err.message };
     }
   },
 
   updateSemester: async (semesterId, payload) => {
+    // Optimistic: merge payload immediately
+    const prev = get().semesters.find((s) => s.id === semesterId);
+    set((s) => ({
+      semesters: sortSemesters(
+        dedupeById(s.semesters.map((sem) => sem.id === semesterId ? { ...sem, ...payload } : sem))
+      ),
+    }));
     try {
       const data = await apiClient.put(`/semesters/${semesterId}`, payload);
+      // Sync any server-computed fields
       set((s) => ({
         semesters: sortSemesters(
-          dedupeById(s.semesters.map((sem) => (sem.id === semesterId ? { ...sem, ...data } : sem)))
+          dedupeById(s.semesters.map((sem) => sem.id === semesterId ? { ...sem, ...data } : sem))
         ),
       }));
       return { success: true, data };
     } catch (err) {
+      // Rollback
+      if (prev) set((s) => ({
+        semesters: sortSemesters(dedupeById(s.semesters.map((sem) => sem.id === semesterId ? prev : sem))),
+      }));
       return { success: false, error: err.message || 'Failed to update semester' };
     }
   },
 
   deleteSemester: async (id) => {
+    // Optimistic: remove immediately
+    const prev = get().semesters.find((s) => s.id === id);
+    set((s) => ({ semesters: s.semesters.filter((sem) => sem.id !== id) }));
     try {
       await apiClient.delete(`/semesters/${id}`);
-      set((s) => ({
-        semesters: s.semesters.filter((sem) => sem.id !== id),
-      }));
       return { success: true };
     } catch (err) {
+      // Rollback
+      if (prev) set((s) => ({ semesters: sortSemesters(dedupeById([...s.semesters, prev])) }));
       return { success: false, error: err.message };
     }
   },
@@ -156,20 +179,38 @@ const useCourseStore = create(
   },
 
   createCourse: async (payload) => {
+    // Optimistic: add placeholder immediately
+    const tempId = `temp-course-${Date.now()}`;
+    const optimistic = { id: tempId, _optimistic: true, ...payload };
+    set((s) => {
+      const existing = s.courses[payload.semester_id] || [];
+      return {
+        courses: {
+          ...s.courses,
+          [payload.semester_id]: sortCourses(dedupeCourses(dedupeById([...existing, optimistic]))),
+        },
+      };
+    });
     try {
       const data = await apiClient.post('/courses', payload);
       set((s) => {
         const existing = s.courses[payload.semester_id] || [];
-        const normalized = sortCourses(dedupeCourses(dedupeById([...existing, data])));
         return {
           courses: {
             ...s.courses,
-            [payload.semester_id]: normalized,
+            [payload.semester_id]: sortCourses(dedupeCourses(dedupeById(existing.map((c) => c.id === tempId ? data : c)))),
           },
         };
       });
       return { success: true, data };
     } catch (err) {
+      // Rollback
+      set((s) => ({
+        courses: {
+          ...s.courses,
+          [payload.semester_id]: (s.courses[payload.semester_id] || []).filter((c) => c.id !== tempId),
+        },
+      }));
       return { success: false, error: err.message };
     }
   },
@@ -183,6 +224,17 @@ const useCourseStore = create(
   },
 
   updateCourse: async (courseId, payload, semesterId) => {
+    // Optimistic: merge payload immediately
+    const prev = (get().courses[semesterId] || []).find((c) => c.id === courseId);
+    set((s) => {
+      const existing = s.courses[semesterId] || [];
+      return {
+        courses: {
+          ...s.courses,
+          [semesterId]: sortCourses(dedupeCourses(existing.map((c) => c.id === courseId ? { ...c, ...payload } : c))),
+        },
+      };
+    });
     try {
       const data = await apiClient.put(`/courses/${courseId}`, payload);
       set((s) => {
@@ -190,34 +242,43 @@ const useCourseStore = create(
         return {
           courses: {
             ...s.courses,
-            [semesterId]: sortCourses(
-              dedupeCourses(
-                existing.map((c) => (c.id === courseId ? { ...c, ...data } : c))
-              )
-            ),
+            [semesterId]: sortCourses(dedupeCourses(existing.map((c) => c.id === courseId ? { ...c, ...data } : c))),
           },
         };
       });
       return { success: true, data };
     } catch (err) {
+      // Rollback
+      if (prev) set((s) => ({
+        courses: {
+          ...s.courses,
+          [semesterId]: sortCourses(dedupeCourses((s.courses[semesterId] || []).map((c) => c.id === courseId ? prev : c))),
+        },
+      }));
       return { success: false, error: err.message || 'Failed to update course' };
     }
   },
 
   deleteCourse: async (courseId, semesterId) => {
+    // Optimistic: remove immediately
+    const prev = (get().courses[semesterId] || []).find((c) => c.id === courseId);
+    set((s) => ({
+      courses: {
+        ...s.courses,
+        [semesterId]: (s.courses[semesterId] || []).filter((c) => c.id !== courseId),
+      },
+    }));
     try {
       await apiClient.delete(`/courses/${courseId}`);
-      set((s) => {
-        const existing = s.courses[semesterId] || [];
-        return {
-          courses: {
-            ...s.courses,
-            [semesterId]: existing.filter((c) => c.id !== courseId),
-          },
-        };
-      });
       return { success: true };
     } catch (err) {
+      // Rollback
+      if (prev) set((s) => ({
+        courses: {
+          ...s.courses,
+          [semesterId]: sortCourses(dedupeCourses(dedupeById([...(s.courses[semesterId] || []), prev]))),
+        },
+      }));
       return { success: false, error: err.message };
     }
   },

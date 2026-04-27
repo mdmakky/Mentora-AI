@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FileText, User, Pencil } from 'lucide-react';
+import { FileText, User, Pencil, Trash2 } from 'lucide-react';
 import useCourseStore from '../../stores/courseStore';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 const CourseCard = ({ course, onUpdated }) => {
   const navigate = useNavigate();
   const updateCourse = useCourseStore((s) => s.updateCourse);
+  const deleteCourse = useCourseStore((s) => s.deleteCourse);
   const [showEdit, setShowEdit] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
     course_code: course.course_code || '',
@@ -19,11 +21,12 @@ const CourseCard = ({ course, onUpdated }) => {
     color: course.color || '#2563EB',
   });
 
-  const handleEditSubmit = async (e) => {
+  const handleEditSubmit = (e) => {
     e.preventDefault();
-    setSaving(true);
     setError('');
-    const result = await updateCourse(
+    // Close modal immediately — store update is optimistic
+    setShowEdit(false);
+    updateCourse(
       course.id,
       {
         course_code: form.course_code.trim(),
@@ -33,14 +36,17 @@ const CourseCard = ({ course, onUpdated }) => {
         color: form.color,
       },
       course.semester_id
-    );
-    setSaving(false);
-    if (!result.success) {
-      setError(result.error || 'Failed to update course');
-      return;
-    }
-    setShowEdit(false);
-    onUpdated?.();
+    ).then((result) => {
+      if (!result.success) {
+        setError(result.error || 'Failed to update course');
+        setShowEdit(true);
+      }
+    });
+  };
+
+  const handleDelete = () => {
+    setShowDeleteConfirm(false);
+    deleteCourse(course.id, course.semester_id);
   };
 
   return (
@@ -49,17 +55,27 @@ const CourseCard = ({ course, onUpdated }) => {
       className="card card-interactive overflow-hidden group relative"
       onClick={() => navigate(`/course/${course.id}`)}
     >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowEdit(true);
-        }}
-        className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-white/90 border border-slate-200 text-slate-500 hover:text-emerald-600 hover:border-emerald-200 transition flex items-center justify-center"
-        title="Edit course"
+      <div
+        className="absolute top-2 right-2 flex items-center gap-1"
+        onClick={(e) => e.stopPropagation()}
       >
-        <Pencil size={13} />
-      </button>
+        <button
+          type="button"
+          onClick={() => setShowEdit(true)}
+          className="w-7 h-7 rounded-lg bg-white/90 border border-slate-200 text-slate-500 hover:text-emerald-600 hover:border-emerald-200 transition flex items-center justify-center"
+          title="Edit course"
+        >
+          <Pencil size={13} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowDeleteConfirm(true)}
+          className="w-7 h-7 rounded-lg bg-white/90 border border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200 transition flex items-center justify-center"
+          title="Delete course"
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
       {/* Color bar */}
       <div className="h-2" style={{ background: course.color }} />
 
@@ -161,12 +177,22 @@ const CourseCard = ({ course, onUpdated }) => {
           <Button variant="ghost" size="sm" type="button" onClick={() => setShowEdit(false)}>
             Cancel
           </Button>
-          <Button size="sm" type="submit" loading={saving}>
+          <Button size="sm" type="submit">
             Save Changes
           </Button>
         </div>
       </form>
     </Modal>
+
+    <ConfirmDialog
+      isOpen={showDeleteConfirm}
+      onClose={() => setShowDeleteConfirm(false)}
+      onConfirm={handleDelete}
+      title="Delete Course"
+      message={`Are you sure you want to delete "${course.course_name}"? All documents and data inside this course will be permanently removed.`}
+      confirmLabel="Delete Course"
+      confirmVariant="danger"
+    />
     </>
   );
 };

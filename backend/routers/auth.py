@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from datetime import datetime, timezone, timedelta
+import re
 import secrets
 import uuid
 import logging
@@ -22,6 +23,21 @@ from services.email_service import send_auth_email
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 settings = get_settings()
+
+# Fields that must never leave the server in any HTTP response.
+_SENSITIVE_FIELDS = {
+    "password_hash",
+    "verification_code",
+    "verification_code_expires_at",
+    "reset_code",
+    "reset_code_expires_at",
+}
+
+
+def _sanitize_user(user: dict) -> dict:
+    """Return a copy of *user* with all server-side sensitive fields removed."""
+    return {k: v for k, v in user.items() if k not in _SENSITIVE_FIELDS}
+
 
 _rate_lock = threading.Lock()
 _attempt_timestamps: dict[str, list[float]] = {}
@@ -105,7 +121,7 @@ def _build_token_response(user: dict) -> TokenResponse:
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        user=user,
+        user=_sanitize_user(user),
     )
 
 
@@ -299,13 +315,13 @@ async def refresh_token(data: RefreshTokenRequest):
     access_token = create_access_token(token_data, is_admin=user.get("is_admin", False))
     new_refresh = create_refresh_token(token_data)
 
-    return TokenResponse(access_token=access_token, refresh_token=new_refresh, user=user)
+    return TokenResponse(access_token=access_token, refresh_token=new_refresh, user=_sanitize_user(user))
 
 
 @router.get("/me")
 async def get_profile(user: dict = Depends(get_current_user)):
     """Get current user profile."""
-    return user
+    return _sanitize_user(user)
 
 
 @router.put("/profile")
@@ -318,7 +334,25 @@ async def update_profile(data: UserProfile, user: dict = Depends(get_current_use
         raise HTTPException(status_code=400, detail="No fields to update")
 
     result = db.table("users").update(update_data).eq("id", user["id"]).execute()
-    return result.data[0] if result.data else user
+
+    # Sync is_current on the semesters table whenever current_semester changes.
+    # current_semester is an ordinal number (1–8); find the matching semester by
+    # its extracted term/name number and mark only that one as current.
+    if "current_semester" in update_data:
+        target_num = update_data["current_semester"]
+        semesters = db.table("semesters").select("id, term, name").eq("user_id", user["id"]).execute()
+        matched_id = None
+        for sem in (semesters.data or []):
+            text = f"{sem.get('term', '')} {sem.get('name', '')}".lower()
+            m = re.search(r"\b([1-8])(?:st|nd|rd|th)?\b", text)
+            if m and int(m.group(1)) == target_num:
+                matched_id = sem["id"]
+                break
+        if matched_id:
+            db.table("semesters").update({"is_current": False}).eq("user_id", user["id"]).execute()
+            db.table("semesters").update({"is_current": True}).eq("id", matched_id).eq("user_id", user["id"]).execute()
+
+    return _sanitize_user(result.data[0] if result.data else user)
 
 
 @router.post("/avatar")

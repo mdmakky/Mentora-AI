@@ -23,8 +23,6 @@ const SemesterSection = ({ semester, onDataChanged }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditSemester, setShowEditSemester] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [savingSemester, setSavingSemester] = useState(false);
   const [semesterError, setSemesterError] = useState('');
   const [form, setForm] = useState({
     course_code: '',
@@ -68,17 +66,19 @@ const SemesterSection = ({ semester, onDataChanged }) => {
 
   const handleAddCourse = async (e) => {
     e.preventDefault();
-    setCreating(true);
-    const result = await createCourse({
+    // Close modal and reset form immediately — store update is optimistic
+    const payload = {
       semester_id: semester.id,
       ...form,
       credit_hours: parseFloat(form.credit_hours),
-    });
-    setCreating(false);
-    if (!result.success) return;
+    };
     setShowAdd(false);
     setForm({ course_code: '', course_name: '', instructor: '', credit_hours: 3, color: COLORS[0] });
-    onDataChanged?.();
+    const result = await createCourse(payload);
+    if (!result.success) {
+      // Rollback already done in store; just notify parent to re-fetch
+      onDataChanged?.();
+    }
   };
 
   const handleSaveSemester = async (e) => {
@@ -88,23 +88,18 @@ const SemesterSection = ({ semester, onDataChanged }) => {
       setSemesterError('This semester number already exists.');
       return;
     }
-
-    setSavingSemester(true);
+    // Close modal immediately — store update is optimistic
+    setShowEditSemester(false);
     const result = await updateSemester(semester.id, {
       name: semesterForm.name.trim(),
       year: parseInt(semesterForm.year, 10),
       term: semesterForm.term,
       is_current: semesterForm.is_current,
     });
-    setSavingSemester(false);
-
     if (!result.success) {
       setSemesterError(result.error || 'Failed to update semester');
-      return;
+      setShowEditSemester(true);
     }
-
-    setShowEditSemester(false);
-    onDataChanged?.();
   };
 
   return (
@@ -245,7 +240,7 @@ const SemesterSection = ({ semester, onDataChanged }) => {
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowAdd(false)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" loading={creating}>
+            <Button size="sm" type="submit">
               Add Course
             </Button>
           </div>
@@ -256,10 +251,8 @@ const SemesterSection = ({ semester, onDataChanged }) => {
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => {
-          void (async () => {
-            const result = await deleteSemester(semester.id);
-            if (result.success) onDataChanged?.();
-          })();
+          setShowDeleteConfirm(false);
+          deleteSemester(semester.id);
         }}
         title="Delete Semester"
         message={`Delete "${semester.name}" and all courses inside it? This cannot be undone.`}
@@ -329,7 +322,7 @@ const SemesterSection = ({ semester, onDataChanged }) => {
             <Button variant="ghost" size="sm" type="button" onClick={() => setShowEditSemester(false)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" loading={savingSemester}>
+            <Button size="sm" type="submit">
               Save Semester
             </Button>
           </div>

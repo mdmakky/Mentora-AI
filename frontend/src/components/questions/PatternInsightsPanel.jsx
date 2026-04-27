@@ -4,9 +4,13 @@ import { Clock, FileQuestion, BarChart3, Repeat2, TrendingUp } from 'lucide-reac
  * PatternInsightsPanel
  * Shows the analyzed exam pattern and repeat topic heatmap from past papers.
  */
-const FREQ_COLOR = (freq) => {
-  if (freq >= 3) return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
-  if (freq >= 2) return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
+// Returns a color based on how many papers a topic appeared in, relative to total papers analyzed.
+const FREQ_COLOR = (freq, total) => {
+  if (total >= 3 && freq >= total) return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+  if (total >= 3 && freq >= 2)    return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
+  if (total === 2 && freq >= 2)   return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+  if (total === 2 && freq === 1)  return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
+  // single paper or fallback
   return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
 };
 
@@ -78,7 +82,7 @@ const PatternInsightsPanel = ({ patternData, papersAnalyzed = 1, analyzedAt }) =
           </div>
           <div className="pattern-topics-grid">
             {repeatTopics.map((t, i) => {
-              const c = FREQ_COLOR(t.frequency);
+              const c = FREQ_COLOR(t.frequency, papersAnalyzed);
               return (
                 <div
                   key={i}
@@ -94,9 +98,13 @@ const PatternInsightsPanel = ({ patternData, papersAnalyzed = 1, analyzedAt }) =
             })}
           </div>
           <div className="pattern-legend">
-            <span className="legend-dot" style={{ background: '#dc2626' }} /> ≥3 years
-            <span className="legend-dot" style={{ background: '#d97706' }} /> 2 years
-            <span className="legend-dot" style={{ background: '#2563eb' }} /> 1 year
+            {papersAnalyzed >= 3 && (
+              <><span className="legend-dot" style={{ background: '#dc2626' }} /> All {papersAnalyzed} papers&nbsp;&nbsp;</>
+            )}
+            {papersAnalyzed >= 2 && (
+              <><span className="legend-dot" style={{ background: papersAnalyzed >= 3 ? '#d97706' : '#dc2626' }} /> {papersAnalyzed >= 3 ? '2+ papers' : 'Both papers'}&nbsp;&nbsp;</>
+            )}
+            <span className="legend-dot" style={{ background: '#2563eb' }} /> 1 paper
           </div>
         </div>
       )}

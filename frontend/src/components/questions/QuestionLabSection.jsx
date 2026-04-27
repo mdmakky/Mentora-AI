@@ -15,7 +15,7 @@ import Modal from '../ui/Modal';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import UploadModal from '../documents/UploadModal';
 
-const QUESTION_COUNTS = [5, 10, 15, 20];
+const QUESTION_COUNTS = [5, 8, 10, 12];
 const QUESTION_TYPES = [
   { value: 'broad', label: 'Broad / Essay', desc: 'Multi-part exam questions with sub-parts' },
   { value: 'short', label: 'Short Answer', desc: '2–4 mark concise questions' },
@@ -474,16 +474,21 @@ const QuestionLabSection = ({ courseId, course }) => {
             </div>
           </div>
 
-          {/* Subject mismatch warning */}
+          {/* Subject mismatch warning — subtle icon in corner, detail on hover */}
           {hasAnalysis && subjectWarnings && subjectWarnings.length > 0 && (
-            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs leading-snug mb-2">
-              <span className="shrink-0 mt-0.5">🚨</span>
-              <span>
-                <strong>Subject mismatch detected.</strong>{' '}
-                The following paper{subjectWarnings.length > 1 ? 's appear' : ' appears'} to be from a different subject than this course:
-                {' '}{subjectWarnings.map((w) => `"${w.file_name}" (detected: ${w.detected_subject})`).join(', ')}.
-                {' '}Generated questions may be inaccurate. Consider removing{subjectWarnings.length > 1 ? ' them' : ' it'} and re-analyzing.
-              </span>
+            <div className="relative flex justify-end mb-1">
+              <div className="group relative inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 text-xs cursor-default select-none">
+                <span>⚠️</span>
+                <span className="font-medium">Subject check</span>
+                {/* Tooltip */}
+                <div className="pointer-events-none absolute bottom-full right-0 mb-1.5 w-72 rounded-lg bg-white border border-amber-200 shadow-lg p-3 text-xs text-slate-700 leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                  <p className="font-semibold text-amber-700 mb-1">Possible subject mismatch</p>
+                  <p>
+                    {subjectWarnings.map((w) => `"${w.file_name}" was detected as ${w.detected_subject}`).join('; ')}.
+                    {' '}If this is correct, you can ignore this. Otherwise remove and re-analyze.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 

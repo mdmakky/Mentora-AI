@@ -14,7 +14,7 @@ from services.supabase_storage_service import (
 )
 from services.pdf_service import (
     extract_text_from_pdf, extract_text_from_docx, extract_text_from_pptx, extract_text_from_image,
-    calculate_file_hash, get_pdf_page_count,
+    extract_text_from_excel, calculate_file_hash, get_pdf_page_count,
 )
 from services.copyright_service import run_copyright_check
 from services.rag_service import process_document_pipeline
@@ -33,8 +33,11 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 ALLOWED_TYPES = {
     "application/pdf": "pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/msword": "doc",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
     "application/vnd.ms-powerpoint": "ppt",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-excel": "xls",
     "image/jpeg": "jpg",
     "image/png": "png",
 }
@@ -64,13 +67,15 @@ def _strip_review_columns(payload: dict) -> dict:
 def _extract_pages_for_scan(file_bytes: bytes, file_type: str):
     if file_type == "pdf":
         return extract_text_from_pdf(file_bytes)
-    if file_type == "docx":
+    if file_type in ("docx", "doc"):
         return extract_text_from_docx(file_bytes)
     if file_type in ("pptx", "ppt"):
         return extract_text_from_pptx(file_bytes)
     if file_type in ("jpg", "png"):
         pages, _ = extract_text_from_image(file_bytes, file_type)
         return pages
+    if file_type in ("xlsx", "xls"):
+        return extract_text_from_excel(file_bytes)
     return []
 
 
@@ -106,7 +111,7 @@ async def upload_document(
     # Validate file type
     file_type = ALLOWED_TYPES.get(file.content_type)
     if not file_type:
-        raise HTTPException(status_code=400, detail="Only PDF, DOCX, PPTX, PPT, JPG, and PNG files are allowed")
+        raise HTTPException(status_code=400, detail="Only PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, JPG, and PNG files are allowed")
 
     # Read file
     file_bytes = await file.read()
@@ -132,8 +137,8 @@ async def upload_document(
     if dup_check.data:
         raise HTTPException(status_code=400, detail="This file has already been uploaded to this course")
 
-    # Auto-convert DOCX, PPTX, and PPT files to PDF using LibreOffice
-    if file_type in ["docx", "pptx", "ppt"]:
+    # Auto-convert DOCX, DOC, PPTX, PPT, XLSX, XLS files to PDF using LibreOffice
+    if file_type in ["docx", "doc", "pptx", "ppt", "xlsx", "xls"]:
         try:
             file_bytes = convert_to_pdf(file_bytes, file_type)
             file_type = "pdf"

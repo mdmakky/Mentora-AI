@@ -317,26 +317,38 @@ async def send_message(
     confidence_values = [c.get("similarity") for c in chunks if isinstance(c.get("similarity"), (int, float))]
     confidence = (sum(confidence_values) / len(confidence_values)) if confidence_values else None
 
-    no_evidence = document_scoped and len(chunks) == 0
+    # no_evidence is True whenever no chunks are returned regardless of scope:
+    # - document_scoped  → user explicitly scoped to a doc(s) that has no match
+    # - whole-course     → no document in the course matched the query
+    no_evidence = len(chunks) == 0
     if no_evidence:
-        if language == "bn":
-            ai_response = (
-                "এই প্রশ্নের জন্য আপনার এই ডকুমেন্টে পর্যাপ্ত প্রমাণ পাইনি।\n\n"
-                "আপনি চাইলে আমি পরের ধাপে সাহায্য করতে পারি:\n"
-                "1. পুরো কোর্স থেকে খুঁজে দেখি\n"
-                "2. সাধারণ জ্ঞান থেকে ব্যাখ্যা দিই\n"
-                "3. প্রশ্নটা আরেকটু নির্দিষ্ট করি"
+        if document_scoped:
+            # Nothing found in this specific document — let the AI answer from general knowledge
+            # while the UI shows the no_evidence flag (which renders the "search whole course" suggestion chips)
+            ai_response = await generate_chat_response(
+                question=data.content,
+                context_chunks=[],
+                conversation_history=conversation_history,
+                language=language,
+                response_mode=response_mode,
+                explanation_level=explanation_level,
+                document_scope=True,
+                no_material=True,
             )
         else:
-            ai_response = (
-                "I could not find enough evidence in this document for that question.\n\n"
-                "I can help you with one of these next steps:\n"
-                "1. Search across the whole course\n"
-                "2. Answer from general knowledge\n"
-                "3. Narrow the question"
+            # Whole-course search returned nothing — still answer fully from general knowledge
+            ai_response = await generate_chat_response(
+                question=data.content,
+                context_chunks=[],
+                conversation_history=conversation_history,
+                language=language,
+                response_mode=response_mode,
+                explanation_level=explanation_level,
+                document_scope=False,
+                no_material=True,
             )
     else:
-        # Generate AI response
+        # Normal RAG path — chunks found, teach from material + general knowledge seamlessly
         ai_response = await generate_chat_response(
             question=data.content,
             context_chunks=chunks,
@@ -345,6 +357,7 @@ async def send_message(
             response_mode=response_mode,
             explanation_level=explanation_level,
             document_scope=document_scoped,
+            no_material=False,
         )
 
     # Extract source docs for citation

@@ -221,6 +221,40 @@ def extract_text_from_image(file_bytes: bytes, file_ext: str) -> Tuple[List[dict
     return extract_text_from_pdf_with_ocr(pdf_bytes)
 
 
+def extract_text_from_excel(file_bytes: bytes) -> List[dict]:
+    """Extract text from an Excel workbook (.xlsx or .xls).
+
+    Each worksheet becomes one 'page'.  Cell values are joined with tab
+    separators so the RAG chunker can split naturally on newlines.
+    """
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+        pages: List[dict] = []
+
+        for sheet_num, sheet in enumerate(wb.worksheets, start=1):
+            rows_text: List[str] = []
+            for row in sheet.iter_rows(values_only=True):
+                # Skip completely empty rows
+                cells = [str(cell) if cell is not None else "" for cell in row]
+                row_str = "\t".join(cells).strip()
+                if row_str:
+                    rows_text.append(row_str)
+
+            content = "\n".join(rows_text).strip()
+            if content:
+                pages.append({
+                    "page_number": sheet_num,
+                    "content": f"[Sheet: {sheet.title}]\n{content}",
+                })
+
+        wb.close()
+        return pages
+    except Exception as e:
+        logger.warning("[pdf_service] Excel extraction failed: %s", e)
+        return [{"page_number": 1, "content": f"Error extracting Excel file: {str(e)}"}]
+
+
 def calculate_file_hash(file_bytes: bytes) -> str:
     """Calculate SHA-256 hash of file content."""
     return hashlib.sha256(file_bytes).hexdigest()

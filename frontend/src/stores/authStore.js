@@ -138,6 +138,9 @@ const useAuthStore = create((set, get) => ({
   },
 
   updateProfile: async (data) => {
+    // Optimistic: merge changes into user immediately
+    const prev = get().user;
+    set((s) => ({ user: sanitizeUser({ ...s.user, ...data }) }));
     const token = localStorage.getItem('token');
     try {
       const response = await axios.put(`${API_BASE}/profile`, data, {
@@ -146,6 +149,8 @@ const useAuthStore = create((set, get) => ({
       set({ user: sanitizeUser(response.data) });
       return { success: true };
     } catch (error) {
+      // Rollback
+      set({ user: prev });
       return { success: false, error: getErrorMessage(error, 'Failed to update profile') };
     }
   },

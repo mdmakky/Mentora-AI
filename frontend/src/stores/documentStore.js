@@ -132,13 +132,15 @@ const useDocumentStore = create(
       set((s) => ({ documents: s.documents.filter((d) => d.id !== docId) }));
       return { success: true };
     }
+    // Optimistic: remove immediately
+    const prev = get().documents.find((d) => d.id === docId);
+    set((s) => ({ documents: s.documents.filter((d) => d.id !== docId) }));
     try {
       await apiClient.delete(`/documents/${docId}`);
-      set((s) => ({
-        documents: s.documents.filter((d) => d.id !== docId),
-      }));
       return { success: true };
     } catch (err) {
+      // Rollback
+      if (prev) set((s) => ({ documents: [prev, ...s.documents] }));
       return { success: false, error: err.message };
     }
   },
@@ -188,25 +190,29 @@ const useDocumentStore = create(
   },
 
   deleteFolder: async (folderId) => {
+    // Optimistic: remove immediately
+    const prev = get().folders.find((f) => f.id === folderId);
+    set((s) => ({ folders: s.folders.filter((f) => f.id !== folderId) }));
     try {
       await apiClient.delete(`/folders/${folderId}`);
-      set((s) => ({
-        folders: s.folders.filter((f) => f.id !== folderId),
-      }));
       return { success: true };
     } catch (err) {
+      // Rollback
+      if (prev) set((s) => ({ folders: [...s.folders, prev] }));
       return { success: false, error: err.message };
     }
   },
 
   renameFolder: async (folderId, name) => {
+    // Optimistic: apply rename immediately
+    const prev = get().folders.find((f) => f.id === folderId);
+    set((s) => ({ folders: s.folders.map((f) => f.id === folderId ? { ...f, name } : f) }));
     try {
       const data = await apiClient.put(`/folders/${folderId}`, { name });
-      set((s) => ({
-        folders: s.folders.map((f) => f.id === folderId ? { ...f, name } : f),
-      }));
       return { success: true, data };
     } catch (err) {
+      // Rollback
+      if (prev) set((s) => ({ folders: s.folders.map((f) => f.id === folderId ? prev : f) }));
       return { success: false, error: err.message };
     }
   },
